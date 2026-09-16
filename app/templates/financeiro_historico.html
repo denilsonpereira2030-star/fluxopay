@@ -1,0 +1,142 @@
+{% extends "fin_layout.html" %}
+{% set active = 'historico' %}
+{% block title %}Histórico{% endblock %}
+
+{% block fin_content %}
+<div class="page-header">
+  <div class="page-eyebrow">Financeiro · Histórico</div>
+  <div class="page-title">Histórico & Status</div>
+  <div class="page-subtitle">Consulte e gerencie todos os boletos cadastrados</div>
+</div>
+
+<!-- FILTERS -->
+<form method="get" action="/financeiro/historico">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="section-title" style="margin-bottom:14px;">Filtros</div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="form-group">
+        <label class="form-label" for="status">Status</label>
+        <select class="form-control" id="status" name="status">
+          <option value="">Todos</option>
+          {% for s in statuses %}
+          <option value="{{ s }}" {% if filtro_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="data_inicio">De</label>
+        <input class="form-control" id="data_inicio" name="data_inicio" type="date" value="{{ filtro_inicio }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="data_fim">Até</label>
+        <input class="form-control" id="data_fim" name="data_fim" type="date" value="{{ filtro_fim }}">
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;">
+      <button class="btn btn-primary" type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Filtrar
+      </button>
+      <a href="/financeiro/historico" class="btn btn-ghost">Limpar</a>
+    </div>
+  </div>
+</form>
+
+<!-- TABLE -->
+<div class="card">
+  {% if boletos %}
+  <div class="section-header">
+    <div class="section-title">Resultados</div>
+    <span class="section-meta">{{ boletos | length }} boleto{{ 's' if boletos | length != 1 }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Estabelecimento</th>
+          <th>Valor</th>
+          <th>Vencimento</th>
+          <th>Enviado em</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in boletos %}
+        <tr id="row-{{ b.id }}">
+          <td style="font-weight:600;">{{ b.estabelecimento }}</td>
+          <td class="td-value">{{ b.valor | currency }}</td>
+          <td class="td-date">{{ b.data_vencimento | date_br }}</td>
+          <td class="td-date" style="color:var(--txt-3);">{{ b.data_envio | date_br }}</td>
+          <td>
+            {% set sc = b.status.lower().replace(' ','-') %}
+            <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+          </td>
+          <td>
+            <div class="action-row">
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Pago">
+                <input type="hidden" name="origem" value="/financeiro/historico">
+                <button class="btn btn-success btn-sm" type="submit">✓ Pago</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Em Lote">
+                <input type="hidden" name="origem" value="/financeiro/historico">
+                <button class="btn btn-ghost btn-sm" type="submit">Lote</button>
+              </form>
+              <button class="btn btn-ghost btn-sm" type="button" onclick="toggleEdit({{ b.id }})">✏</button>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/excluir" style="display:inline;">
+                <input type="hidden" name="origem" value="/financeiro/historico">
+                <button class="btn btn-danger btn-sm" type="submit" onclick="return confirm('Excluir este boleto?')">✕</button>
+              </form>
+            </div>
+            <!-- INLINE EDIT FORM -->
+            <div id="edit-{{ b.id }}" hidden style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/editar">
+                <input type="hidden" name="origem" value="/financeiro/historico">
+                <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px;">
+                  <div class="form-group">
+                    <label class="form-label">Valor</label>
+                    <input class="form-control" name="valor" type="number" step="0.01" min="0" value="{{ b.valor }}" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Vencimento</label>
+                    <input class="form-control" name="data_vencimento" type="date" value="{{ b.data_vencimento }}" required>
+                  </div>
+                  <div class="form-group" style="grid-column:1/-1;">
+                    <label class="form-label">Status</label>
+                    <select class="form-control" name="status">
+                      {% for s in statuses %}
+                      <option value="{{ s }}" {% if b.status == s %}selected{% endif %}>{{ s }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                  <button class="btn btn-primary btn-sm" type="submit">Salvar</button>
+                  <button class="btn btn-ghost btn-sm" type="button" onclick="toggleEdit({{ b.id }})">Cancelar</button>
+                </div>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <div class="empty-state-text">Nenhum boleto encontrado</div>
+    <div class="text-sm text-faint" style="margin-top:4px;">Tente ajustar os filtros acima</div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleEdit(id) {
+  const el = document.getElementById('edit-' + id);
+  el.hidden = !el.hidden;
+}
+</script>
+{% endblock %}

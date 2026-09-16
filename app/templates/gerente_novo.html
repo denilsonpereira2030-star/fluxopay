@@ -1,0 +1,315 @@
+{% extends "gerente_layout.html" %}
+{% set active = 'novo' %}
+{% block title %}Novo Boleto{% endblock %}
+
+{% block ger_content %}
+<div style="margin-bottom:18px;">
+  <div class="page-eyebrow">{{ est_nome }}</div>
+  <div class="page-title">Cadastrar Boleto</div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  {{ error }}
+</div>
+{% endif %}
+
+{% if duplicata_aviso %}
+<div class="alert alert-warn" style="flex-direction:column;align-items:flex-start;gap:10px;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <strong>Possível duplicata detectada</strong>
+  </div>
+  <div style="font-size:12.5px;line-height:1.6;">
+    Já existe um boleto ativo de <strong>{{ duplicata_aviso.valor | currency }}</strong>
+    com vencimento em <strong>{{ duplicata_aviso.data_vencimento | date_br }}</strong>
+    com status <em>{{ duplicata_aviso.status }}</em>.
+    Tem certeza que deseja cadastrar outro?
+  </div>
+  <form method="post" action="/gerente/boleto" enctype="multipart/form-data" id="form-confirma" style="display:contents;">
+    <input type="hidden" name="valor" value="{{ dup_valor }}">
+    <input type="hidden" name="data_vencimento" value="{{ dup_vencimento }}">
+    <input type="hidden" name="confirmar_duplicata" value="1">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <label class="btn btn-primary" style="cursor:pointer;position:relative;">
+        <input type="file" name="arquivo" accept=".pdf,.png,.jpg,.jpeg" required
+               style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;"
+               onchange="document.getElementById('form-confirma').submit()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Sim, salvar mesmo assim (selecione o arquivo)
+      </label>
+      <a href="/gerente" class="btn btn-ghost">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<form method="post" action="/gerente/boleto" enctype="multipart/form-data" id="form-novo">
+  <div class="card" style="display:flex;flex-direction:column;gap:18px;">
+
+    <!-- FILE UPLOAD -->
+    <div class="form-group">
+      <label class="form-label">Arquivo do Boleto</label>
+
+      <!-- opções de input separadas em dois botões visuais -->
+      <div class="upload-options" id="upload-options">
+
+        <!-- PDF / imagem da galeria -->
+        <label class="upload-opt" id="opt-file">
+          <input type="file" name="arquivo" id="arquivo"
+                 accept=".pdf,.png,.jpg,.jpeg"
+                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          <span class="opt-label">Selecionar PDF<br>ou Imagem</span>
+          <span class="opt-sub">da galeria ou arquivos</span>
+        </label>
+
+        <!-- câmera — filtro scanner aplicado automaticamente -->
+        <label class="upload-opt" id="opt-camera">
+          <input type="file" name="arquivo" id="arquivo-camera"
+                 accept="image/*" capture="environment"
+                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M9 6l1.5-2h3L15 6"/></svg>
+          <span class="opt-label">🖨️ Scannear Boleto<br>via Câmera</span>
+          <span class="opt-sub">filtro scanner automático</span>
+        </label>
+
+      </div>
+
+      <!-- preview após seleção -->
+      <div class="upload-selected" id="upload-selected" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span id="upload-filename"></span>
+        <button type="button" class="upload-clear" id="upload-clear" title="Remover">✕</button>
+      </div>
+
+    </div>
+
+    <!-- VALOR -->
+    <div class="form-group">
+      <label class="form-label" for="valor">Valor (R$)</label>
+      <input class="form-control" id="valor" name="valor" type="number" step="0.01" min="0.01"
+             placeholder="0,00" inputmode="decimal" required
+             value="{{ dup_valor if dup_valor is defined else '' }}">
+    </div>
+
+    <!-- VENCIMENTO -->
+    <div class="form-group">
+      <label class="form-label" for="data_vencimento">Data de Vencimento</label>
+      <input class="form-control" id="data_vencimento" name="data_vencimento" type="date"
+             value="{{ dup_vencimento if dup_vencimento is defined else hoje.isoformat() }}" min="{{ hoje.isoformat() }}" required>
+    </div>
+
+    <!-- URGENT WARNING -->
+    <div id="urgent-warn" hidden class="alert alert-warn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div>
+        <strong>Boleto vence hoje!</strong> O financeiro será notificado com urgência.
+        <div style="margin-top:6px;">
+          <a id="whatsapp-link" href="#" target="_blank" class="btn-whatsapp" style="font-size:12px;padding:7px 12px;">
+            <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 1C5.926 1 1 5.926 1 12c0 1.79.427 3.468 1.18 4.953L1 23l6.226-1.164A10.959 10.959 0 0012 23c6.074 0 11-4.925 11-11S18.073 1 12 1z"/></svg>
+            Notificar via WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-full btn-lg" type="submit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Salvar Boleto
+    </button>
+  </div>
+</form>
+
+<style>
+.upload-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.upload-opt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px 16px;
+  border: 2px dashed var(--border-hi);
+  border-radius: var(--r-lg);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: transparent;
+  user-select: none;
+}
+
+.upload-opt:hover,
+.upload-opt:focus-within {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+}
+
+.upload-opt svg {
+  width: 28px;
+  height: 28px;
+  stroke: var(--txt-3);
+  flex-shrink: 0;
+  transition: stroke 0.15s;
+}
+
+.upload-opt:hover svg,
+.upload-opt:focus-within svg { stroke: var(--blue-hi); }
+
+.opt-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--txt-2);
+  line-height: 1.3;
+  transition: color 0.15s;
+}
+
+.upload-opt:hover .opt-label,
+.upload-opt:focus-within .opt-label { color: var(--txt-1); }
+
+.opt-sub {
+  font-size: 10px;
+  color: var(--txt-3);
+}
+
+/* destaque quando arquivo selecionado */
+.upload-opt.selected {
+  border-color: var(--emerald);
+  border-style: solid;
+  background: var(--emerald-dim);
+}
+.upload-opt.selected svg { stroke: var(--emerald); }
+.upload-opt.selected .opt-label { color: var(--emerald); }
+
+/* preview de arquivo selecionado */
+.upload-selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--emerald-dim);
+  border: 1px solid var(--emerald-bdr);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--emerald);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.upload-selected svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: var(--emerald);
+}
+
+.upload-selected span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--emerald);
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.upload-clear:hover { opacity: 1; }
+</style>
+
+<script>
+const hoje = "{{ hoje.isoformat() }}";
+const estNome = "{{ est_nome }}";
+
+const inputFile   = document.getElementById('arquivo');
+const inputCamera = document.getElementById('arquivo-camera');
+const optFile     = document.getElementById('opt-file');
+const optCamera   = document.getElementById('opt-camera');
+const selectedDiv = document.getElementById('upload-selected');
+const selectedName = document.getElementById('upload-filename');
+const clearBtn    = document.getElementById('upload-clear');
+const form        = document.getElementById('form-novo');
+const urgentWarn  = document.getElementById('urgent-warn');
+const whatsappLink = document.getElementById('whatsapp-link');
+const valorInput  = document.getElementById('valor');
+const vencInput   = document.getElementById('data_vencimento');
+
+// ── active file tracker ────────────────────────────────────────
+// O form só envia um campo "arquivo"; quando o gerente usa a câmera,
+// copiamos o FileList para o input principal antes do submit.
+let activeSource = null; // 'file' | 'camera'
+
+function markSelected(source, name) {
+  activeSource = source;
+  optFile.classList.toggle('selected', source === 'file');
+  optCamera.classList.toggle('selected', source === 'camera');
+  selectedName.textContent = name;
+  selectedDiv.hidden = false;
+}
+
+function clearSelection() {
+  activeSource = null;
+  optFile.classList.remove('selected');
+  optCamera.classList.remove('selected');
+  selectedDiv.hidden = true;
+  inputFile.value = '';
+  inputCamera.value = '';
+}
+
+inputFile.addEventListener('change', () => {
+  if (inputFile.files[0]) markSelected('file', inputFile.files[0].name);
+});
+
+inputCamera.addEventListener('change', () => {
+  if (inputCamera.files[0]) markSelected('camera', inputCamera.files[0].name);
+});
+
+clearBtn.addEventListener('click', clearSelection);
+
+// Antes do submit: se a câmera foi usada, transferir o arquivo
+// para o campo "arquivo" que o backend espera.
+form.addEventListener('submit', (e) => {
+  if (activeSource === null) {
+    e.preventDefault();
+    alert('Selecione um arquivo ou scaneie um boleto antes de salvar.');
+    return;
+  }
+  if (activeSource === 'camera' && inputCamera.files[0]) {
+    // Criar um DataTransfer para injetar o arquivo no input principal
+    const dt = new DataTransfer();
+    dt.items.add(inputCamera.files[0]);
+    inputFile.files = dt.files;
+  }
+});
+
+// ── alerta de urgência ─────────────────────────────────────────
+function updateUrgent() {
+  if (vencInput.value !== hoje) { urgentWarn.hidden = true; return; }
+  urgentWarn.hidden = false;
+  const valor = parseFloat(valorInput.value || 0).toFixed(2).replace('.', ',');
+  const msg = encodeURIComponent(
+    `🚨 *URGENTE: BOLETO COM VENCIMENTO PARA HOJE!* 🚨\n\n*Estabelecimento:* ${estNome}\n*Valor:* R$ ${valor}\n*Data:* HOJE\n\n_Por favor, realize o pagamento com prioridade. O boleto já está disponível no sistema._`
+  );
+  whatsappLink.href = `https://web.whatsapp.com/send?text=${msg}`;
+}
+
+vencInput.addEventListener('change', updateUrgent);
+valorInput.addEventListener('input', updateUrgent);
+updateUrgent();
+</script>
+{% endblock %}

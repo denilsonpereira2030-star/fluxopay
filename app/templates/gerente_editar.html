@@ -1,0 +1,49 @@
+{% extends "gerente_layout.html" %}
+{% set active = 'contas' %}
+{% block title %}Editar Boleto{% endblock %}
+
+{% block ger_content %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+  <a href="/gerente/contas" class="btn btn-ghost btn-sm">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Voltar
+  </a>
+</div>
+
+<div style="margin-bottom:18px;">
+  <div class="page-eyebrow">{{ est_nome }}</div>
+  <div class="page-title">Editar Boleto</div>
+</div>
+
+<form method="post" action="/gerente/boleto/{{ boleto.id }}/editar">
+  <div class="card" style="display:flex;flex-direction:column;gap:18px;">
+    <div class="form-group">
+      <label class="form-label">Arquivo</label>
+      <div style="background:var(--void);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 13px;font-size:13px;color:var(--txt-2);">
+        {{ boleto.caminho_arquivo.split('/')[-1] }}
+      </div>
+      <div class="text-sm text-faint" style="margin-top:4px;">O arquivo não pode ser alterado após o cadastro</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="valor">Valor (R$)</label>
+      <input class="form-control" id="valor" name="valor" type="number" step="0.01" min="0.01"
+             value="{{ boleto.valor }}" inputmode="decimal" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="data_vencimento">Data de Vencimento</label>
+      <input class="form-control" id="data_vencimento" name="data_vencimento" type="date"
+             value="{{ boleto.data_vencimento }}" required>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" type="submit" style="flex:1;min-width:120px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Salvar Alterações
+      </button>
+      <a href="/gerente/contas" class="btn btn-ghost" style="flex:0;">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

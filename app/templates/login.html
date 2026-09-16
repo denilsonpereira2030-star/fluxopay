@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Entrar{% endblock %}
+
+{% block extra_head %}
+<style>
+.login-bg {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--ground);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-bg::before {
+  content: '';
+  position: absolute;
+  top: -120px; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(37,99,235,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-bg::after {
+  content: '';
+  position: absolute;
+  bottom: -80px; right: -80px;
+  width: 400px; height: 400px;
+  background: radial-gradient(ellipse, rgba(16,185,129,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: 24px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.4);
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.login-logo-icon {
+  width: 42px; height: 42px;
+  background: var(--blue);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.login-logo-icon svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.login-logo-text { font-family: var(--ff-head); font-size: 17px; font-weight: 800; color: var(--txt-1); letter-spacing: -0.03em; }
+.login-logo-sub { font-size: 10px; color: var(--txt-3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 1px; }
+
+.login-heading { font-family: var(--ff-head); font-size: 20px; font-weight: 700; color: var(--txt-1); letter-spacing: -0.025em; margin-bottom: 4px; }
+.login-sub { font-size: 13px; color: var(--txt-2); margin-bottom: 24px; }
+
+.login-stack { display: flex; flex-direction: column; gap: 14px; }
+
+.login-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--txt-3);
+}
+
+/* ── checkbox "Manter conectado" ── */
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.remember-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--border-hi);
+  border-radius: 5px;
+  background: var(--lift);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+  top: 0;
+}
+
+.remember-checkbox:checked {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.remember-checkbox:checked::after {
+  content: '';
+  display: block;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(3px, 3px);
+}
+
+.remember-checkbox:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.remember-label {
+  font-size: 13px;
+  color: var(--txt-2);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.3;
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="login-bg">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <div>
+        <div class="login-logo-text">FluxoPay</div>
+        <div class="login-logo-sub">Gestão Financeira</div>
+      </div>
+    </div>
+
+    <div class="login-heading">Acesso ao Sistema</div>
+    <div class="login-sub">Entre com suas credenciais para continuar</div>
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom:16px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/login" class="login-stack">
+      <div class="form-group">
+        <label class="form-label" for="login">Usuário</label>
+        <input class="form-control" id="login" name="login" type="text" placeholder="ex: gerente1" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="senha">Senha</label>
+        <input class="form-control" id="senha" name="senha" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <div class="remember-row">
+        <input class="remember-checkbox" type="checkbox" id="remember" name="remember" value="1">
+        <label class="remember-label" for="remember">Manter conectado neste dispositivo</label>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" type="submit" style="margin-top:2px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Entrar no Sistema
+      </button>
+    </form>
+
+    <div class="login-footer">
+      Acesso restrito &bull; Gestão de Contas a Pagar
+    </div>
+  </div>
+</div>
+{% endblock %}

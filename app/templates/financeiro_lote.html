@@ -1,0 +1,139 @@
+{% extends "fin_layout.html" %}
+{% set active = 'lote' %}
+{% block title %}Lote da Semana{% endblock %}
+
+{% block fin_content %}
+{# ── agrupar por estabelecimento ── #}
+{% set grupos = {} %}
+{% for b in boletos %}
+  {% if b.estabelecimento not in grupos %}
+    {% set _ = grupos.update({b.estabelecimento: []}) %}
+  {% endif %}
+  {% set _ = grupos[b.estabelecimento].append(b) %}
+{% endfor %}
+
+<div class="page-header">
+  <div class="page-eyebrow">Financeiro · Lote de Segunda-feira</div>
+  <div class="page-title">Lote da Semana</div>
+  <div class="page-subtitle">
+    Sábado {{ lote_inicio | date_br }} até Sexta-feira {{ lote_fim | date_br }}
+    — boletos com vencimento nesse intervalo
+  </div>
+</div>
+
+<!-- SUMMARY + DOWNLOAD -->
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div class="stat-tile" style="padding:12px 16px;border-radius:var(--r-md);min-width:auto;">
+      <div class="stat-label">Boletos no lote</div>
+      <div class="stat-value" style="font-size:20px;">{{ boletos | length }}</div>
+    </div>
+    <div class="stat-tile" style="padding:12px 16px;border-radius:var(--r-md);min-width:auto;">
+      <div class="stat-label">Valor total</div>
+      <div class="stat-value tabular" style="font-size:17px;">{{ boletos | sum(attribute='valor') | float | currency }}</div>
+    </div>
+    <div class="stat-tile" style="padding:12px 16px;border-radius:var(--r-md);min-width:auto;">
+      <div class="stat-label">Lojas</div>
+      <div class="stat-value" style="font-size:20px;">{{ grupos | length }}</div>
+    </div>
+  </div>
+  {% if boletos %}
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt-2);cursor:pointer;">
+      <input type="checkbox" id="lote-marcar" checked style="accent-color:var(--blue);width:14px;height:14px;">
+      <span>Marcar como "Em Lote"</span>
+    </label>
+    <a id="lote-pdf-btn" href="/financeiro/pdf/lote?marcar_em_lote=1" class="btn btn-primary" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Gerar PDF do Lote
+    </a>
+  </div>
+  <script>
+  (function(){
+    var chk = document.getElementById('lote-marcar');
+    var btn = document.getElementById('lote-pdf-btn');
+    if(chk && btn){
+      chk.addEventListener('change', function(){
+        btn.href = '/financeiro/pdf/lote' + (chk.checked ? '?marcar_em_lote=1' : '?marcar_em_lote=0');
+      });
+    }
+  })();
+  </script>
+  {% endif %}
+</div>
+
+{% if boletos %}
+
+{# ── uma seção por estabelecimento ── #}
+{% for nome_est, lista in grupos.items() %}
+<div class="card" style="margin-bottom:16px;">
+  <div class="section-header">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0;"></div>
+      <div class="section-title">{{ nome_est }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="section-meta tabular" style="font-family:var(--ff-head);font-weight:600;color:var(--txt-1);">
+        {{ lista | sum(attribute='valor') | float | currency }}
+      </span>
+      <span class="badge badge-em-lote">{{ lista | length }} item{{ 's' if lista | length != 1 }}</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Valor</th>
+          <th>Vencimento</th>
+          <th>Enviado em</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in lista %}
+        <tr>
+          <td class="td-value">{{ b.valor | currency }}</td>
+          <td class="td-date">{{ b.data_vencimento | date_br }}</td>
+          <td class="td-date" style="color:var(--txt-3);">{{ b.data_envio | date_br }}</td>
+          <td>
+            {% set sc = b.status.lower().replace(' ','-') %}
+            <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+          </td>
+          <td>
+            <div class="action-row">
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Pago">
+                <input type="hidden" name="origem" value="/financeiro/lote">
+                <button class="btn btn-success btn-sm" type="submit">✓ Pago</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Pendente">
+                <input type="hidden" name="origem" value="/financeiro/lote">
+                <button class="btn btn-ghost btn-sm" type="submit">Pendente</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/excluir" style="display:inline;">
+                <input type="hidden" name="origem" value="/financeiro/lote">
+                <button class="btn btn-danger btn-sm" type="submit" onclick="return confirm('Excluir este boleto?')">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <div class="empty-state-text">Nenhum boleto no lote atual</div>
+    <div class="text-sm text-faint" style="margin-top:4px;">Período: {{ lote_inicio | date_br }} a {{ lote_fim | date_br }}</div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

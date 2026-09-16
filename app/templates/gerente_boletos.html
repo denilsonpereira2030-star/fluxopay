@@ -1,0 +1,159 @@
+{% extends "gerente_layout.html" %}
+{% set active = 'boletos' %}
+{% block title %}Boletos — Todas as Lojas{% endblock %}
+
+{% block ger_content %}
+<div style="margin-bottom:16px;">
+  <div class="page-eyebrow">Visão Geral</div>
+  <div class="page-title" style="font-size:20px;">📂 Boletos por Loja</div>
+</div>
+
+<!-- FILTRO MÊS/ANO (mobile-first) -->
+<form method="get" action="/gerente/boletos" style="margin-bottom:16px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <select name="mes" class="form-control" style="flex:1;min-width:120px;padding:9px 10px;font-size:13px;">
+      <option value="">Todos os meses</option>
+      {% for m_num, m_nome in meses %}
+      <option value="{{ m_num }}" {% if mes_sel == m_num %}selected{% endif %}>{{ m_nome }}</option>
+      {% endfor %}
+    </select>
+    <select name="ano" class="form-control" style="flex:1;min-width:90px;padding:9px 10px;font-size:13px;">
+      <option value="">Qualquer ano</option>
+      {% for a in anos %}
+      <option value="{{ a }}" {% if ano_sel == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-primary btn-sm" type="submit">Filtrar</button>
+    {% if mes_sel or ano_sel %}
+    <a href="/gerente/boletos" class="btn btn-ghost btn-sm">✕</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- BLOCOS POR ESTABELECIMENTO -->
+{% for nome_est, grupo in grupos.items() %}
+<div class="ger-est-bloco {% if nome_est == est_nome %}ger-est-bloco--mine{% endif %}" style="margin-bottom:12px;">
+
+  <!-- cabeçalho -->
+  <div class="ger-est-header">
+    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+      <div class="ger-est-dot {% if nome_est == est_nome %}ger-est-dot--mine{% endif %}"></div>
+      <span class="ger-est-nome">{{ nome_est }}</span>
+      {% if nome_est == est_nome %}
+      <span style="font-size:9px;font-weight:700;color:var(--blue-hi);background:var(--blue-dim);border-radius:4px;padding:1px 5px;text-transform:uppercase;letter-spacing:0.05em;">Sua loja</span>
+      {% endif %}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="tabular" style="font-family:var(--ff-head);font-size:13px;font-weight:700;color:var(--txt-1);">{{ grupo.total | currency }}</span>
+      <span class="badge badge-em-lote" style="font-size:9px;">{{ grupo.qtd }}</span>
+    </div>
+  </div>
+
+  <!-- chips de status -->
+  {% set pendentes = grupo.boletos | selectattr('status','equalto','Pendente') | list %}
+  {% set em_lote   = grupo.boletos | selectattr('status','equalto','Em Lote')  | list %}
+  {% set pagos     = grupo.boletos | selectattr('status','equalto','Pago')     | list %}
+  {% if grupo.boletos %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;padding:7px 14px;border-bottom:1px solid var(--border);background:var(--ground);">
+    {% if pendentes %}<span class="gchip gchip--pendente"><span class="gchip-dot"></span>{{ pendentes | length }} Pendente{{ 's' if pendentes | length != 1 }}</span>{% endif %}
+    {% if em_lote   %}<span class="gchip gchip--em-lote"  ><span class="gchip-dot"></span>{{ em_lote | length }} Em Lote</span>{% endif %}
+    {% if pagos     %}<span class="gchip gchip--pago"     ><span class="gchip-dot"></span>{{ pagos | length }} Pago{{ 's' if pagos | length != 1 }}</span>{% endif %}
+  </div>
+  {% endif %}
+
+  <!-- cards de boleto -->
+  <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+  {% if grupo.boletos %}
+    {% for b in grupo.boletos %}
+    {% set sc = b.status.lower().replace(' ','-') %}
+    {% set is_today = b.data_vencimento == hoje %}
+    <div class="ger-boleto-card {% if is_today %}ger-boleto-card--urgent{% endif %}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div>
+          <div class="tabular" style="font-family:var(--ff-head);font-size:17px;font-weight:800;letter-spacing:-0.03em;color:var(--txt-1);">{{ b.valor | currency }}</div>
+          <div style="font-size:11px;color:var(--txt-2);margin-top:1px;">
+            Vence {{ b.data_vencimento | date_br }}
+            {% if is_today %}<span style="color:var(--amber);font-weight:700;">· HOJE</span>{% endif %}
+          </div>
+        </div>
+        <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--txt-3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <a href="/financeiro/boleto/{{ b.id }}/arquivo" target="_blank" style="color:var(--blue-hi);text-decoration:none;">
+          ↗ {{ b.caminho_arquivo.split('/')[-1] | truncate(34, True, '…') }}
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div style="padding:16px 4px;color:var(--txt-3);font-size:12.5px;text-align:center;">
+    Nenhum boleto{% if mes_sel or ano_sel %} neste período{% endif %}
+  </div>
+  {% endif %}
+  </div>
+
+</div>
+{% endfor %}
+
+<style>
+.ger-est-bloco {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+.ger-est-bloco--mine {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue-dim);
+}
+.ger-est-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--lift);
+  border-bottom: 1px solid var(--border);
+}
+.ger-est-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--border-hi);
+  flex-shrink: 0;
+}
+.ger-est-dot--mine { background: var(--blue); }
+.ger-est-nome {
+  font-family: var(--ff-head);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--txt-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 100px;
+}
+.gchip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.gchip--pendente { color: var(--amber);   background: var(--amber-dim);   }
+.gchip--em-lote  { color: var(--blue-hi); background: var(--blue-dim);    }
+.gchip--pago     { color: var(--emerald); background: var(--emerald-dim); }
+
+.ger-boleto-card {
+  background: var(--lift);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px;
+}
+.ger-boleto-card--urgent {
+  border-color: var(--amber-bdr);
+  background: linear-gradient(135deg, var(--lift) 70%, var(--amber-dim) 100%);
+}
+</style>
+{% endblock %}

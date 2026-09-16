@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+uploads/
+contas.db
+lote_impressao.pdf
+boletos_urgentes_hoje.pdf
+test_system.py
+app.py
+*.log
+.git/
+.claude/

@@ -1,0 +1,282 @@
+{% extends "fin_layout.html" %}
+{% set active = 'boletos' %}
+{% block title %}Boletos por Estabelecimento{% endblock %}
+
+{% block fin_content %}
+<div class="page-header">
+  <div class="page-eyebrow">Financeiro · Visão Agrupada</div>
+  <div class="page-title">📂 Boletos por Estabelecimento</div>
+  <div class="page-subtitle">Todas as lojas · {{ total_geral_qtd }} boleto{{ 's' if total_geral_qtd != 1 }} · {{ total_geral_valor | currency }}</div>
+</div>
+
+<!-- FILTRO DE MÊS/ANO -->
+<form method="get" action="/financeiro/boletos" class="mes-filtro-form">
+  <div class="mes-filtro-row">
+    <label class="mes-filtro-label">Filtrar por período:</label>
+    <div class="mes-filtro-selects">
+      <select name="mes" class="form-control form-control--sm">
+        <option value="">Todos os meses</option>
+        {% for m_num, m_nome in meses %}
+        <option value="{{ m_num }}" {% if mes_sel == m_num %}selected{% endif %}>{{ m_nome }}</option>
+        {% endfor %}
+      </select>
+      <select name="ano" class="form-control form-control--sm">
+        <option value="">Qualquer ano</option>
+        {% for a in anos %}
+        <option value="{{ a }}" {% if ano_sel == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-primary btn-sm" type="submit">Filtrar</button>
+      {% if mes_sel or ano_sel %}
+      <a href="/financeiro/boletos" class="btn btn-ghost btn-sm">Limpar</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<!-- BLOCOS DE ESTABELECIMENTO -->
+<div class="est-grid">
+{% for nome_est, grupo in grupos.items() %}
+<div class="est-bloco">
+  <!-- cabeçalho do bloco -->
+  <div class="est-bloco__header">
+    <div class="est-bloco__dot"></div>
+    <div class="est-bloco__nome">{{ nome_est }}</div>
+    <div class="est-bloco__stats">
+      <span class="est-bloco__total tabular">{{ grupo.total | currency }}</span>
+      <span class="badge badge-em-lote" style="font-size:10px;">{{ grupo.qtd }} item{{ 's' if grupo.qtd != 1 }}</span>
+    </div>
+  </div>
+
+  <!-- resumo rápido por status -->
+  {% set pendentes = grupo.boletos | selectattr('status','equalto','Pendente') | list %}
+  {% set em_lote   = grupo.boletos | selectattr('status','equalto','Em Lote')  | list %}
+  {% set pagos     = grupo.boletos | selectattr('status','equalto','Pago')     | list %}
+  <div class="est-bloco__status-row">
+    {% if pendentes %}
+    <span class="status-chip status-chip--pendente">
+      <span class="chip-dot"></span>{{ pendentes | length }} Pendente{{ 's' if pendentes | length != 1 }}
+    </span>
+    {% endif %}
+    {% if em_lote %}
+    <span class="status-chip status-chip--em-lote">
+      <span class="chip-dot"></span>{{ em_lote | length }} Em Lote
+    </span>
+    {% endif %}
+    {% if pagos %}
+    <span class="status-chip status-chip--pago">
+      <span class="chip-dot"></span>{{ pagos | length }} Pago{{ 's' if pagos | length != 1 }}
+    </span>
+    {% endif %}
+  </div>
+
+  <!-- lista de boletos -->
+  {% if grupo.boletos %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Valor</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+          <th>Arquivo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in grupo.boletos %}
+        {% set sc = b.status.lower().replace(' ','-') %}
+        {% set venc = b.data_vencimento %}
+        <tr class="{% if venc == hoje %}row-urgent{% endif %}">
+          <td class="td-value">{{ b.valor | currency }}</td>
+          <td class="td-date {% if venc == hoje %}td-urgent{% endif %}">
+            {{ venc | date_br }}
+            {% if venc == hoje %}<span class="badge badge-urgente" style="font-size:9px;margin-left:4px;">Hoje</span>{% endif %}
+          </td>
+          <td><span class="badge badge-{{ sc }}">{{ b.status }}</span></td>
+          <td class="td-file">
+            <a href="/financeiro/boleto/{{ b.id }}/arquivo" class="file-link" title="{{ b.caminho_arquivo.split('/')[-1] }}" target="_blank">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>{{ b.caminho_arquivo.split('/')[-1] | truncate(22, True, '…') }}</span>
+            </a>
+          </td>
+          <td>
+            <div class="action-row">
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Pago">
+                <input type="hidden" name="origem" value="/financeiro/boletos{{ '?mes=' + mes_sel|string + '&ano=' + ano_sel|string if (mes_sel and ano_sel) else '' }}">
+                <button class="btn btn-success btn-sm" type="submit">✓ Pago</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                {% if b.status == 'Em Lote' %}
+                <input type="hidden" name="status" value="Pendente">
+                <button class="btn btn-ghost btn-sm" type="submit">↩ Pendente</button>
+                {% else %}
+                <input type="hidden" name="status" value="Em Lote">
+                <button class="btn btn-ghost btn-sm" type="submit">Lote</button>
+                {% endif %}
+                <input type="hidden" name="origem" value="/financeiro/boletos{{ '?mes=' + mes_sel|string + '&ano=' + ano_sel|string if (mes_sel and ano_sel) else '' }}">
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/excluir" style="display:inline;">
+                <input type="hidden" name="origem" value="/financeiro/boletos">
+                <button class="btn btn-danger btn-sm" type="submit"
+                        onclick="return confirm('Excluir boleto de {{ b.valor | currency }}?')">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="est-bloco__empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    Nenhum boleto{% if mes_sel or ano_sel %} neste período{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+
+<style>
+/* ── filtro de mês/ano ── */
+.mes-filtro-form {
+  margin-bottom: 20px;
+}
+.mes-filtro-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mes-filtro-label {
+  font-size: 12px;
+  color: var(--txt-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mes-filtro-selects {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.form-control--sm {
+  padding: 7px 10px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+/* ── grid de estabelecimentos ── */
+.est-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── bloco individual ── */
+.est-bloco {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+
+.est-bloco__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--lift);
+  border-bottom: 1px solid var(--border);
+}
+
+.est-bloco__dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+
+.est-bloco__nome {
+  font-family: var(--ff-head);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--txt-1);
+  letter-spacing: -0.02em;
+  flex: 1;
+}
+
+.est-bloco__stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.est-bloco__total {
+  font-family: var(--ff-head);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--txt-1);
+}
+
+.est-bloco__status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--ground);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+}
+.chip-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-chip--pendente { color: var(--amber);   background: var(--amber-dim);   }
+.status-chip--em-lote  { color: var(--blue-hi); background: var(--blue-dim);    }
+.status-chip--pago     { color: var(--emerald); background: var(--emerald-dim); }
+
+/* ── empty ── */
+.est-bloco__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 18px;
+  color: var(--txt-3);
+  font-size: 13px;
+}
+.est-bloco__empty svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* ── file link ── */
+.file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--blue-hi);
+  font-size: 11.5px;
+  text-decoration: none;
+  transition: color 0.15s;
+  max-width: 160px;
+  overflow: hidden;
+}
+.file-link:hover { color: var(--txt-1); }
+.file-link svg { width: 13px; height: 13px; flex-shrink: 0; }
+.file-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.td-file { max-width: 180px; }
+.td-urgent { color: var(--amber); font-weight: 600; }
+</style>
+{% endblock %}

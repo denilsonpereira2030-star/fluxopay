@@ -1,0 +1,228 @@
+{% extends "fin_layout.html" %}
+{% set active = 'dashboard' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block fin_content %}
+<div class="page-header">
+  <div class="page-eyebrow">Financeiro · Visão Geral</div>
+  <div class="page-title">Dashboard</div>
+  <div class="page-subtitle">Período do lote: {{ stats.lote_inicio | date_br }} até {{ stats.lote_fim | date_br }}</div>
+</div>
+
+<!-- ATALHO RÁPIDO: LOTE SEMANAL DO PEDRO -->
+<div class="pedro-shortcut">
+  <div class="pedro-shortcut__info">
+    <div class="pedro-shortcut__label">Lote Semanal do Pedro</div>
+    <div class="pedro-shortcut__sub">
+      {{ stats.total_lote_qtd }} boleto{{ 's' if stats.total_lote_qtd != 1 }} ·
+      {{ stats.lote_inicio | date_br }} → {{ stats.lote_fim | date_br }}
+      · Total {{ stats.total_lote_valor | currency }}
+    </div>
+  </div>
+  <div class="pedro-shortcut__actions">
+    <label class="pedro-mark-label">
+      <input type="checkbox" id="pedro-marcar" checked>
+      <span>Marcar como "Em Lote"</span>
+    </label>
+    {% if stats.total_lote_qtd > 0 %}
+    <a id="pedro-btn" href="/financeiro/pdf/lote?marcar_em_lote=1" class="btn btn-primary" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Imprimir Lote
+    </a>
+    {% else %}
+    <span class="btn btn-ghost" style="cursor:not-allowed;opacity:.5;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Sem boletos
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.pedro-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, var(--blue-dim) 0%, var(--surface) 100%);
+  border: 1.5px solid var(--blue-bdr);
+  border-radius: var(--r-xl);
+  position: relative;
+  overflow: hidden;
+}
+.pedro-shortcut::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--blue);
+  border-radius: var(--r-xl) 0 0 var(--r-xl);
+}
+.pedro-shortcut__label {
+  font-family: var(--ff-head);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--txt-1);
+  letter-spacing: -0.02em;
+}
+.pedro-shortcut__sub {
+  font-size: 12px;
+  color: var(--txt-2);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.pedro-shortcut__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.pedro-mark-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--txt-2);
+  cursor: pointer;
+  user-select: none;
+}
+.pedro-mark-label input[type=checkbox] {
+  accent-color: var(--blue);
+  width: 14px;
+  height: 14px;
+}
+</style>
+
+<script>
+(function() {
+  var chk = document.getElementById('pedro-marcar');
+  var btn = document.getElementById('pedro-btn');
+  if (chk && btn) {
+    chk.addEventListener('change', function() {
+      var base = '/financeiro/pdf/lote';
+      btn.href = base + (chk.checked ? '?marcar_em_lote=1' : '?marcar_em_lote=0');
+    });
+  }
+})();
+</script>
+
+<!-- STAT TILES -->
+<div class="stats-row">
+  <div class="stat-tile">
+    <div class="stat-label">Total do Lote</div>
+    <div class="stat-value tabular" style="font-size:18px;">{{ stats.total_lote_valor | currency }}</div>
+    <div class="stat-sub">{{ stats.total_lote_qtd }} boleto{{ 's' if stats.total_lote_qtd != 1 }}</div>
+  </div>
+  <div class="stat-tile stat-tile--urgent">
+    <div class="stat-label">Urgentes Hoje</div>
+    <div class="stat-value">{{ stats.urgentes_hoje }}</div>
+    <div class="stat-sub">Vencem hoje</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Pendentes</div>
+    <div class="stat-value">{{ stats.pendentes_qtd }}</div>
+    <div class="stat-sub">Aguardando ação</div>
+  </div>
+  <div class="stat-tile stat-tile--ok">
+    <div class="stat-label">Pagos</div>
+    <div class="stat-value">{{ stats.pagos_qtd }}</div>
+    <div class="stat-sub">Quitados</div>
+  </div>
+</div>
+
+<!-- URGENT BANNER -->
+{% if urgent_rows %}
+<div class="urgent-banner">
+  <div class="urgent-banner__left">
+    <div class="urgent-pulse">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div>
+      <div class="urgent-banner__title">{{ urgent_rows | length }} boleto{{ 's' if urgent_rows | length != 1 }} vencem HOJE</div>
+      <div class="urgent-banner__sub">Total: {{ urgent_rows | sum(attribute='valor') | float | currency }} · Ação imediata necessária</div>
+    </div>
+  </div>
+  <div class="flex gap-8">
+    {% set msg = "🚨 *URGENTE: Boletos com vencimento HOJE* 🚨%0A%0A" %}
+    {% for r in urgent_rows %}{% set msg = msg + "*" + r.estabelecimento + "* — " + (r.valor | currency) + "%0A" %}{% endfor %}
+    {% set msg = msg + "%0A_Acesse o sistema para confirmar o pagamento._" %}
+    <a href="https://web.whatsapp.com/send?text={{ msg }}" target="_blank" class="btn-whatsapp">
+      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.999 1C5.926 1 1 5.926 1 12c0 1.79.427 3.468 1.18 4.953L1 23l6.226-1.164A10.959 10.959 0 0012 23c6.074 0 11-4.925 11-11S18.073 1 12 1z"/></svg>
+      WhatsApp
+    </a>
+    <a href="/financeiro/pdf/urgentes" class="btn btn-warn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      PDF Urgentes
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- URGENT TABLE -->
+{% if urgent_rows %}
+<div class="card" style="margin-bottom:24px;">
+  <div class="section-header">
+    <div class="section-title">Boletos Urgentes — Vencem Hoje</div>
+    <span class="badge badge-urgente">{{ urgent_rows | length }} urgente{{ 's' if urgent_rows | length != 1 }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Estabelecimento</th>
+          <th>Valor</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in urgent_rows %}
+        <tr class="row-urgent">
+          <td>{{ b.estabelecimento }}</td>
+          <td class="td-value">{{ b.valor | currency }}</td>
+          <td class="td-date">{{ b.data_vencimento | date_br }}</td>
+          <td>
+            {% set sc = b.status.lower().replace(' ','-') %}
+            <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+          </td>
+          <td>
+            <div class="action-row">
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Pago">
+                <input type="hidden" name="origem" value="/financeiro">
+                <button class="btn btn-success btn-sm" type="submit">✓ Pago</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/status" style="display:inline;">
+                <input type="hidden" name="status" value="Em Lote">
+                <input type="hidden" name="origem" value="/financeiro">
+                <button class="btn btn-ghost btn-sm" type="submit">Lote</button>
+              </form>
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/excluir" style="display:inline;">
+                <input type="hidden" name="origem" value="/financeiro">
+                <button class="btn btn-danger btn-sm" type="submit" onclick="return confirm('Excluir este boleto?')">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <div class="empty-state-text">Sem boletos urgentes hoje</div>
+    <div class="text-sm text-faint" style="margin-top:4px;">Nenhum boleto vence hoje</div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

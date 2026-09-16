@@ -1,0 +1,195 @@
+{% extends "gerente_layout.html" %}
+{% set active = 'contas' %}
+{% block title %}Minhas Contas{% endblock %}
+
+{% block ger_content %}
+{# ── agrupar boletos por estabelecimento ── #}
+{% set grupos = {} %}
+{% for b in boletos %}
+  {% if b.estabelecimento not in grupos %}
+    {% set _ = grupos.update({b.estabelecimento: []}) %}
+  {% endif %}
+  {% set _ = grupos[b.estabelecimento].append(b) %}
+{% endfor %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <div class="page-eyebrow">{{ est_nome }}</div>
+    <div class="page-title">Minhas Contas</div>
+  </div>
+  <span class="badge badge-em-lote" style="font-size:11px;">{{ boletos | length }} boleto{{ 's' if boletos | length != 1 }}</span>
+</div>
+
+{% if success %}
+<div class="alert alert-success">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  Boleto salvo com sucesso!
+</div>
+{% endif %}
+
+{% if not boletos %}
+<div class="card">
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <div class="empty-state-text">Nenhum boleto enviado</div>
+    <div class="text-sm text-faint" style="margin-top:4px;">Toque em "Novo Boleto" para começar</div>
+  </div>
+</div>
+{% else %}
+
+{# ── para gerente fixo: exibe só o grupo dele em destaque ── #}
+{# ── (se vier mais de um estabelecimento no futuro, exibe seções) ── #}
+
+{% for nome_est, lista in grupos.items() %}
+<div class="est-group {% if nome_est == est_nome %}est-group--mine{% endif %}">
+
+  {# cabeçalho de grupo — só exibe se houver mais de um estabelecimento #}
+  {% if grupos | length > 1 %}
+  <div class="est-group__header">
+    <div class="est-group__dot"></div>
+    <span class="est-group__name">{{ nome_est }}</span>
+    <span class="est-group__count">{{ lista | length }} boleto{{ 's' if lista | length != 1 }}</span>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;flex-direction:column;gap:10px;">
+  {% for b in lista %}
+  {% set sc = b.status.lower().replace(' ','-') %}
+  {% set is_today = b.data_vencimento == hoje %}
+  <div class="boleto-mobile-card {% if is_today %}card-urgent{% endif %}">
+    <div class="bmc-header">
+      <div>
+        <div class="bmc-value">{{ b.valor | currency }}</div>
+        <div class="bmc-sub">Vence {{ b.data_vencimento | date_br }}</div>
+      </div>
+      <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+    </div>
+    <div class="bmc-filename">{{ b.caminho_arquivo.split('/')[-1] }}</div>
+    {% if b.status == 'Pendente' %}
+    <div class="bmc-actions">
+      <a href="/gerente/boleto/{{ b.id }}/editar" class="btn btn-ghost btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar
+      </a>
+      <form method="post" action="/gerente/boleto/{{ b.id }}/excluir" style="display:inline;">
+        <button class="btn btn-danger btn-sm" type="submit" onclick="return confirm('Excluir este boleto?')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+          Excluir
+        </button>
+      </form>
+    </div>
+    {% else %}
+    <div style="font-size:11px;color:var(--txt-3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+      Boleto em processamento — edição indisponível
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
+
+</div>
+{% if not loop.last %}<div style="height:8px;"></div>{% endif %}
+{% endfor %}
+
+{% endif %}
+
+<style>
+/* ── grupo por estabelecimento ── */
+.est-group {
+  margin-bottom: 4px;
+}
+
+.est-group--mine .est-group__header {
+  border-left-color: var(--blue);
+}
+
+.est-group__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--lift);
+  border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--border-hi);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  margin-bottom: 8px;
+}
+
+.est-group__dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+
+.est-group__name {
+  font-family: var(--ff-head);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--txt-1);
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+
+.est-group__count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── cards de boleto ── */
+.boleto-mobile-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 16px;
+}
+
+.boleto-mobile-card.card-urgent {
+  border-color: var(--amber-bdr);
+  background: linear-gradient(135deg, var(--surface) 80%, var(--amber-dim) 100%);
+}
+
+.bmc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.bmc-value {
+  font-family: var(--ff-head);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--txt-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.bmc-sub {
+  font-size: 12px;
+  color: var(--txt-2);
+  margin-top: 2px;
+}
+
+.bmc-filename {
+  font-size: 11px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.bmc-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>
+{% endblock %}
