@@ -646,16 +646,25 @@ table.data-table {
 /* ── DIVIDER ─────────────────────────────────────────── */
 .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
-/* ── MOBILE TOPBAR (gerente) ─────────────────────────── */
+/* ── MOBILE TOPBAR (financeiro) ──────────────────────── */
 .mobile-topbar {
   display: none;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 14px 16px;
+  padding: 8px 12px;
   align-items: center;
   justify-content: space-between;
+  flex-direction: row;
+  min-height: 50px;
+  max-height: 55px;
   position: sticky; top: 0; z-index: 50;
 }
+
+.mobile-topbar .brand-mark { gap: 8px; }
+.mobile-topbar .brand-icon { width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; }
+.mobile-topbar .brand-icon svg { width: 13px; height: 13px; }
+.mobile-topbar span { font-size: 0.95rem; }
+.mobile-topbar .btn { font-size: 11px; padding: 4px 9px; }
 
 .mobile-nav {
   display: none;
@@ -718,11 +727,47 @@ table.data-table {
   .data-table tbody td:nth-child(n+4) { display: none; }
 }
 
+@media (max-width: 768px) {
+  /* Header compacto — single row, max 55px */
+  .mobile-topbar {
+    padding: 8px 12px;
+    min-height: 50px;
+    max-height: 55px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .mobile-topbar .brand-mark { flex-direction: row; gap: 7px; }
+  .mobile-topbar .brand-icon { width: 26px; height: 26px; }
+  .mobile-topbar .brand-icon svg { width: 13px; height: 13px; }
+  .mobile-topbar span,
+  .mobile-topbar .brand-name { font-size: 0.95rem; }
+  .mobile-topbar .btn { font-size: 11px; padding: 4px 9px; }
+
+  /* Gerente topbar compacto */
+  .gerente-topbar {
+    padding: 8px 12px !important;
+    min-height: 50px;
+    max-height: 55px;
+    flex-direction: row !important;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .gerente-topbar .brand-mark { flex-direction: row; gap: 7px; }
+  .gerente-topbar .brand-icon { width: 26px !important; height: 26px !important; border-radius: 8px !important; }
+  .gerente-topbar .brand-icon svg { width: 13px !important; height: 13px !important; }
+  .gerente-topbar > div > div:first-child { font-size: 0.95rem !important; }
+  .gerente-topbar > div > div:last-child  { font-size: 9px !important; }
+  .gerente-topbar .btn { font-size: 11px; padding: 4px 9px; }
+
+  .main-content { padding: 12px; }
+  .urgent-banner { flex-direction: column; }
+}
+
 @media (max-width: 480px) {
   .stats-row { grid-template-columns: 1fr 1fr; }
   .stat-value { font-size: 18px; }
-  .main-content { padding: 12px; }
-  .urgent-banner { flex-direction: column; }
+  .main-content { padding: 10px; }
 }
 
 /* ── UTILITIES ───────────────────────────────────────── */
