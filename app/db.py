@@ -8,8 +8,19 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "uploads")))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+raw_data_dir = os.getenv("DATA_DIR")
+
+if raw_data_dir and not raw_data_dir.startswith("/app"):
+    DATA_DIR = Path(raw_data_dir)
+else:
+    DATA_DIR = BASE_DIR / "uploads"
+
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    DATA_DIR = BASE_DIR / "uploads"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 DB_PATH = DATA_DIR / "contas.db"
 UPLOADS_DIR = DATA_DIR
 
