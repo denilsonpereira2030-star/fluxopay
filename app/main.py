@@ -146,7 +146,7 @@ async def gerente_salvar_boleto(
     request: Request,
     valor: float = Form(...),
     data_vencimento: str = Form(...),
-    arquivo: UploadFile = File(...),
+    arquivo: UploadFile = File(None),
     confirmar_duplicata: str = Form(""),
 ):
     user = _require_user(request)
@@ -169,9 +169,13 @@ async def gerente_salvar_boleto(
                 status_code=200,
             )
 
-    content = await arquivo.read()
-    if not content or not arquivo.filename:
+    sem_arquivo = not arquivo or not getattr(arquivo, "filename", None)
+    if sem_arquivo:
         return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Selecione um arquivo antes de salvar.", status_code=422)
+
+    content = await arquivo.read()
+    if not content:
+        return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Arquivo vazio. Selecione um arquivo válido.", status_code=422)
 
     nome, tipo, dados = pdf_service.processar_upload(content, arquivo.filename, arquivo.content_type or "application/octet-stream")
     db.salvar_boleto(user["estabelecimento_id"], nome, tipo, dados, valor, vencimento)
