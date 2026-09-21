@@ -8,16 +8,10 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# No Render, /app/uploads é o ponto de montagem do disco persistente.
-# Em desenvolvimento local, usa a pasta uploads/ na raiz do projeto.
-if os.environ.get("RENDER") or Path("/app/uploads").exists():
-    UPLOADS_DIR = Path("/app/uploads")
-else:
-    UPLOADS_DIR = BASE_DIR / "uploads"
-
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = UPLOADS_DIR / "contas.db"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "uploads")))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "contas.db"
+UPLOADS_DIR = DATA_DIR
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
