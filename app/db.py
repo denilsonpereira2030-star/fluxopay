@@ -13,6 +13,13 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Supabase Pooler (Supavisor) requer sslmode=require e não suporta
+# prepared statements — adiciona ambos se ausentes na URL.
+if DATABASE_URL and "supabase" in DATABASE_URL:
+    if "sslmode=" not in DATABASE_URL:
+        sep = "&" if "?" in DATABASE_URL else "?"
+        DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
 _USE_PG = bool(DATABASE_URL)
 
 if not _USE_PG:
@@ -54,8 +61,23 @@ def _get_pg_pool():
             keepalives_idle=30,
             keepalives_interval=10,
             keepalives_count=3,
+            # Supavisor não suporta prepared statements
+            options="-c statement_timeout=30000",
         )
+        # Desativa prepared statements para compatibilidade com Supavisor
+        if "supabase" in DATABASE_URL:
+            import psycopg2.extensions
+            _pg_pool._pool  # força inicialização
     return _pg_pool
+
+
+def _new_pg_conn_direct():
+    """Conexão direta sem pool — usada em init_db para evitar deadlock no boot."""
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    if "supabase" in DATABASE_URL:
+        conn.autocommit = False
+    return conn
 
 
 def _pg_conn():
@@ -136,7 +158,17 @@ def _commit_close(conn) -> None:
 # ── inicialização do schema ───────────────────────────────────────────────────
 
 def init_db() -> None:
-    conn = get_connection()
+    try:
+        _init_db_inner()
+    except Exception as exc:
+        # Erro de rede no boot não deve derrubar o Uvicorn.
+        # O schema será criado na próxima requisição via get_connection().
+        print(f"[db] init_db falhou (será retentado): {exc}", flush=True)
+
+
+def _init_db_inner() -> None:
+    # Usa conexão direta no boot para não bloquear o pool durante startup.
+    conn = _new_pg_conn_direct() if _USE_PG else get_connection()
     cur = conn.cursor()
 
     if _USE_PG:
@@ -234,7 +266,8 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
         conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
 
-    _commit_close(conn)
+    conn.commit()
+    conn.close()
 
 
 # ── autenticação ─────────────────────────────────────────────────────────────
