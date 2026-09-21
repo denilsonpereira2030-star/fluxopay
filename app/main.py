@@ -174,12 +174,12 @@ def gerente_salvar_boleto(
     if not conteudo:
         return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Selecione um arquivo antes de salvar.", status_code=422)
 
-    _MAX_UPLOAD = 5 * 1024 * 1024  # 5 MB
+    _MAX_UPLOAD = 3 * 1024 * 1024  # 3 MB
     if len(conteudo) > _MAX_UPLOAD:
         return _tpl(
             request, "gerente_novo.html", user=user, est_nome=est_nome,
             hoje=date.today(),
-            error=f"Arquivo muito grande ({len(conteudo) // 1024} KB). Limite máximo: 5 MB.",
+            error=f"Arquivo muito grande ({len(conteudo) // 1024} KB). O limite máximo é 3MB.",
             status_code=413,
         )
 
@@ -350,17 +350,22 @@ async def download_lote(request: Request, marcar_em_lote: str = "1"):
     user = _get_user(request)
     if not user or user["perfil"] != "financeiro":
         raise HTTPException(403)
-    rows = db.listar_boletos_do_lote()
-    if not rows:
-        raise HTTPException(404, "Nenhum boleto no lote atual.")
-    if marcar_em_lote == "1":
-        db.marcar_lote_em_lote([r["id"] for r in rows])
-    pdf_bytes = pdf_service.gerar_lote_impressao_bytes(rows)
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=lote_impressao.pdf"},
-    )
+    pdf_bytes = None
+    try:
+        rows = db.listar_boletos_do_lote()
+        if not rows:
+            raise HTTPException(404, "Nenhum boleto no lote atual.")
+        if marcar_em_lote == "1":
+            db.marcar_lote_em_lote([r["id"] for r in rows])
+        pdf_bytes = pdf_service.gerar_lote_impressao_bytes(rows)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=lote_impressao.pdf"},
+        )
+    finally:
+        del pdf_bytes
+        gc.collect()
 
 
 @app.get("/financeiro/pdf/lote/pedro")
@@ -374,15 +379,20 @@ async def download_urgentes(request: Request):
     user = _get_user(request)
     if not user or user["perfil"] != "financeiro":
         raise HTTPException(403)
-    rows = db.listar_boletos_urgentes_hoje()
-    if not rows:
-        raise HTTPException(404, "Nenhum boleto urgente hoje.")
-    pdf_bytes = pdf_service.gerar_pdf_urgentes_bytes(rows)
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline; filename=boletos_urgentes_hoje.pdf"},
-    )
+    pdf_bytes = None
+    try:
+        rows = db.listar_boletos_urgentes_hoje()
+        if not rows:
+            raise HTTPException(404, "Nenhum boleto urgente hoje.")
+        pdf_bytes = pdf_service.gerar_pdf_urgentes_bytes(rows)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=boletos_urgentes_hoje.pdf"},
+        )
+    finally:
+        del pdf_bytes
+        gc.collect()
 
 
 # ── ARQUIVO DE BOLETO (visualização inline) ───────────────────────────────────
