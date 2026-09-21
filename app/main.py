@@ -173,8 +173,8 @@ async def gerente_salvar_boleto(
     if not content:
         return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Selecione um arquivo antes de salvar.", status_code=422)
 
-    caminho = pdf_service.salvar_upload(content, arquivo.filename or "boleto", arquivo.content_type or "")
-    db.salvar_boleto(user["estabelecimento_id"], caminho, valor, vencimento)
+    nome, tipo, dados = pdf_service.processar_upload(content, arquivo.filename or "boleto", arquivo.content_type or "")
+    db.salvar_boleto(user["estabelecimento_id"], nome, tipo, dados, valor, vencimento)
     return RedirectResponse("/gerente/contas?ok=1", status_code=303)
 
 
@@ -313,9 +313,9 @@ async def download_lote(request: Request, marcar_em_lote: str = "1"):
         raise HTTPException(404, "Nenhum boleto no lote atual.")
     if marcar_em_lote == "1":
         db.marcar_lote_em_lote([r["id"] for r in rows])
-    path = pdf_service.gerar_lote_impressao_pdf(rows)
+    pdf_bytes = pdf_service.gerar_lote_impressao_bytes(rows)
     return StreamingResponse(
-        io.FileIO(str(path)),
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": "inline; filename=lote_impressao.pdf"},
     )
@@ -335,9 +335,9 @@ async def download_urgentes(request: Request):
     rows = db.listar_boletos_urgentes_hoje()
     if not rows:
         raise HTTPException(404, "Nenhum boleto urgente hoje.")
-    path = pdf_service.gerar_pdf_urgentes(rows)
+    pdf_bytes = pdf_service.gerar_pdf_urgentes_bytes(rows)
     return StreamingResponse(
-        io.FileIO(str(path)),
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": "inline; filename=boletos_urgentes_hoje.pdf"},
     )
@@ -353,13 +353,13 @@ async def ver_arquivo_financeiro(boleto_id: int, request: Request):
     boleto = db.get_boleto_by_id(boleto_id)
     if not boleto:
         raise HTTPException(404)
-    p = Path(boleto["caminho_arquivo"])
-    if not p.exists():
+    dados = db.get_boleto_arquivo(boleto_id)
+    if not dados:
         raise HTTPException(404, "Arquivo não encontrado.")
-    fname = p.name
+    fname = boleto.get("arquivo_nome") or "boleto.pdf"
     return StreamingResponse(
-        io.FileIO(str(p)),
-        media_type="application/pdf",
+        io.BytesIO(dados),
+        media_type=boleto.get("arquivo_tipo") or "application/pdf",
         headers={"Content-Disposition": f"inline; filename={fname}"},
     )
 
@@ -370,13 +370,14 @@ async def ver_arquivo_gerente(boleto_id: int, request: Request):
     boleto = db.get_boleto_by_id(boleto_id)
     if not boleto or boleto["estabelecimento_id"] != user["estabelecimento_id"]:
         raise HTTPException(403)
-    p = Path(boleto["caminho_arquivo"])
-    if not p.exists():
+    dados = db.get_boleto_arquivo(boleto_id)
+    if not dados:
         raise HTTPException(404, "Arquivo não encontrado.")
+    fname = boleto.get("arquivo_nome") or "boleto.pdf"
     return StreamingResponse(
-        io.FileIO(str(p)),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={p.name}"},
+        io.BytesIO(dados),
+        media_type=boleto.get("arquivo_tipo") or "application/pdf",
+        headers={"Content-Disposition": f"inline; filename={fname}"},
     )
 
 

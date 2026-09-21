@@ -8,120 +8,193 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-raw_data_dir = os.getenv("DATA_DIR")
 
-if raw_data_dir and not raw_data_dir.startswith("/app"):
-    DATA_DIR = Path(raw_data_dir)
-else:
-    DATA_DIR = BASE_DIR / "uploads"
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Render às vezes fornece postgres:// — psycopg2 exige postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-try:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-except PermissionError:
-    DATA_DIR = BASE_DIR / "uploads"
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+_USE_PG = bool(DATABASE_URL)
 
-DB_PATH = DATA_DIR / "contas.db"
-UPLOADS_DIR = DATA_DIR
+if not _USE_PG:
+    _db_path = BASE_DIR / "uploads" / "contas.db"
+    _db_path.parent.mkdir(parents=True, exist_ok=True)
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
 
-def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+# ── conexão ───────────────────────────────────────────────────────────────────
+
+def _pg_conn():
+    import psycopg2
+    import psycopg2.extras
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
+
+def get_connection():
+    if _USE_PG:
+        return _pg_conn()
+    conn = sqlite3.connect(str(_db_path))
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db() -> None:
-    conn = get_connection()
+def _ph(n: int = 1) -> str:
+    """Placeholder: %s para PG, ? para SQLite."""
+    ph = "%s" if _USE_PG else "?"
+    return ", ".join([ph] * n)
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS estabelecimentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL UNIQUE
-        )
-    """)
 
-    if conn.execute("SELECT COUNT(*) FROM estabelecimentos").fetchone()[0] == 0:
-        conn.executemany("INSERT INTO estabelecimentos (nome) VALUES (?)", [
-            ("GP Conveniencia",), ("Posto Atibaia",), ("WP Auto posto",),
-        ])
-    else:
-        conn.execute("UPDATE estabelecimentos SET nome='GP Conveniencia' WHERE id=1")
-        conn.execute("UPDATE estabelecimentos SET nome='Posto Atibaia' WHERE id=2")
-        conn.execute("UPDATE estabelecimentos SET nome='WP Auto posto' WHERE id=3")
+def _fetchall(cursor) -> list[dict]:
+    if _USE_PG:
+        cols = [d[0] for d in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+    return [dict(r) for r in cursor.fetchall()]
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            estabelecimento_id INTEGER,
-            login TEXT NOT NULL UNIQUE,
-            senha TEXT NOT NULL,
-            perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro'))
-        )
-    """)
 
-    if conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0] == 0:
-        conn.executemany(
-            "INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES (?,?,?,?)",
-            [
-                (1, "gerente1", "senha123", "gerente"),
-                (2, "gerente2", "senha123", "gerente"),
-                (3, "gerente3", "senha123", "gerente"),
-                (None, "financeiro", "admin123", "financeiro"),
-            ],
-        )
+def _fetchone(cursor) -> dict | None:
+    if _USE_PG:
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        cols = [d[0] for d in cursor.description]
+        return dict(zip(cols, row))
+    row = cursor.fetchone()
+    return dict(row) if row else None
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS boletos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            estabelecimento_id INTEGER NOT NULL,
-            caminho_arquivo TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT NOT NULL,
-            data_envio TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Pendente',
-            FOREIGN KEY (estabelecimento_id) REFERENCES estabelecimentos(id)
-        )
-    """)
 
-    cols = [r["name"] for r in conn.execute("PRAGMA table_info(boletos)").fetchall()]
-    if "status" not in cols:
-        conn.execute("ALTER TABLE boletos ADD COLUMN status TEXT DEFAULT 'Pendente'")
-        conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
-
+def _commit_close(conn) -> None:
     conn.commit()
     conn.close()
 
 
+# ── inicialização do schema ───────────────────────────────────────────────────
+
+def init_db() -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+
+    if _USE_PG:
+        serial = "SERIAL"
+        blob = "BYTEA"
+        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro'))"
+    else:
+        serial = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        blob = "BLOB"
+        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro'))"
+
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS estabelecimentos (
+            id {serial} {'PRIMARY KEY' if _USE_PG else ''},
+            nome TEXT NOT NULL UNIQUE
+        )
+    """)
+
+    cur.execute("SELECT COUNT(*) FROM estabelecimentos")
+    count = cur.fetchone()
+    count = count[0] if isinstance(count, tuple) else count[0]
+    ph1 = "%s" if _USE_PG else "?"
+    if count == 0:
+        for nome in ("GP Conveniencia", "Posto Atibaia", "WP Auto posto"):
+            cur.execute(f"INSERT INTO estabelecimentos (nome) VALUES ({ph1})", (nome,))
+    else:
+        cur.execute(f"UPDATE estabelecimentos SET nome={ph1} WHERE id=1", ("GP Conveniencia",))
+        cur.execute(f"UPDATE estabelecimentos SET nome={ph1} WHERE id=2", ("Posto Atibaia",))
+        cur.execute(f"UPDATE estabelecimentos SET nome={ph1} WHERE id=3", ("WP Auto posto",))
+
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id {serial} {'PRIMARY KEY' if _USE_PG else ''},
+            estabelecimento_id INTEGER,
+            login TEXT NOT NULL UNIQUE,
+            senha TEXT NOT NULL,
+            {pk_check}
+        )
+    """)
+
+    cur.execute("SELECT COUNT(*) FROM usuarios")
+    ucount = cur.fetchone()
+    ucount = ucount[0] if isinstance(ucount, tuple) else ucount[0]
+    if ucount == 0:
+        for row in [
+            (1, "gerente1", "senha123", "gerente"),
+            (2, "gerente2", "senha123", "gerente"),
+            (3, "gerente3", "senha123", "gerente"),
+            (None, "financeiro", "admin123", "financeiro"),
+        ]:
+            cur.execute(
+                f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
+                row,
+            )
+
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS boletos (
+            id {serial} {'PRIMARY KEY' if _USE_PG else ''},
+            estabelecimento_id INTEGER NOT NULL,
+            arquivo_nome TEXT,
+            arquivo_tipo TEXT,
+            arquivo_dados {blob},
+            valor REAL NOT NULL,
+            data_vencimento TEXT NOT NULL,
+            data_envio TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pendente'
+        )
+    """)
+
+    # migração: adiciona colunas BLOB em banco SQLite legado
+    if not _USE_PG:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(boletos)").fetchall()]
+        for col, definition in [
+            ("arquivo_nome", "TEXT"),
+            ("arquivo_tipo", "TEXT"),
+            ("arquivo_dados", "BLOB"),
+            ("status", "TEXT DEFAULT 'Pendente'"),
+        ]:
+            if col not in cols:
+                conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
+        conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
+
+    _commit_close(conn)
+
+
+# ── autenticação ─────────────────────────────────────────────────────────────
+
 def authenticate_user(login: str, senha: str) -> dict | None:
     conn = get_connection()
-    row = conn.execute(
-        "SELECT id, estabelecimento_id, login, perfil FROM usuarios WHERE login=? AND senha=?",
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT id, estabelecimento_id, login, perfil FROM usuarios WHERE login={_ph()} AND senha={_ph()}",
         (login, senha),
-    ).fetchone()
+    )
+    row = _fetchone(cur)
     conn.close()
-    if row:
-        return dict(row)
-    return None
+    return row
 
+
+# ── estabelecimentos ──────────────────────────────────────────────────────────
 
 def get_estabelecimento_nome(estabelecimento_id: int | None) -> str:
     if estabelecimento_id is None:
         return "Financeiro"
     conn = get_connection()
-    row = conn.execute("SELECT nome FROM estabelecimentos WHERE id=?", (estabelecimento_id,)).fetchone()
+    cur = conn.cursor()
+    cur.execute(f"SELECT nome FROM estabelecimentos WHERE id={_ph()}", (estabelecimento_id,))
+    row = _fetchone(cur)
     conn.close()
     return row["nome"] if row else ""
 
 
 def listar_estabelecimentos() -> list[dict]:
     conn = get_connection()
-    rows = conn.execute("SELECT id, nome FROM estabelecimentos ORDER BY id").fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, nome FROM estabelecimentos ORDER BY id")
+    rows = _fetchall(cur)
     conn.close()
-    return [dict(r) for r in rows]
+    return rows
 
+
+# ── boletos ───────────────────────────────────────────────────────────────────
 
 def listar_boletos(
     estabelecimento_id: int | None = None,
@@ -129,25 +202,27 @@ def listar_boletos(
     data_inicio: date | None = None,
     data_fim: date | None = None,
 ) -> list[dict]:
+    ph = "%s" if _USE_PG else "?"
     query = """
         SELECT b.id, b.estabelecimento_id, e.nome AS estabelecimento,
-               b.caminho_arquivo, b.valor, b.data_vencimento, b.data_envio, b.status
+               b.arquivo_nome, b.arquivo_tipo,
+               b.valor, b.data_vencimento, b.data_envio, b.status
         FROM boletos b
         INNER JOIN estabelecimentos e ON e.id = b.estabelecimento_id
     """
     filtros, params = [], []
 
     if estabelecimento_id is not None:
-        filtros.append("b.estabelecimento_id = ?")
+        filtros.append(f"b.estabelecimento_id = {ph}")
         params.append(estabelecimento_id)
     if status:
-        filtros.append("b.status = ?")
+        filtros.append(f"b.status = {ph}")
         params.append(status)
     if data_inicio:
-        filtros.append("b.data_vencimento >= ?")
+        filtros.append(f"b.data_vencimento >= {ph}")
         params.append(data_inicio.isoformat())
     if data_fim:
-        filtros.append("b.data_vencimento <= ?")
+        filtros.append(f"b.data_vencimento <= {ph}")
         params.append(data_fim.isoformat())
 
     if filtros:
@@ -155,20 +230,17 @@ def listar_boletos(
     query += " ORDER BY b.data_vencimento ASC, e.nome ASC"
 
     conn = get_connection()
-    rows = conn.execute(query, params).fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    rows = _fetchall(cur)
     conn.close()
-    return [dict(r) for r in rows]
+    return rows
 
 
 def listar_boletos_por_estabelecimento(
     ano: int | None = None,
     mes: int | None = None,
 ) -> dict[str, dict]:
-    """
-    Retorna dict keyed por nome do estabelecimento, cada valor sendo:
-      { "id": int, "nome": str, "boletos": [...], "total": float, "qtd": int }
-    Filtrado por mês/ano quando fornecidos.
-    """
     ests = listar_estabelecimentos()
     resultado: dict[str, dict] = {}
     for est in ests:
@@ -191,20 +263,11 @@ def listar_boletos_por_estabelecimento(
 
 
 def calcular_lote_atual() -> tuple[date, date]:
-    """
-    Janela do lote de Segunda-feira:
-      início = Sábado imediatamente anterior à Segunda (segunda - 2 dias)
-      fim    = Sexta-feira da mesma semana da Segunda (segunda + 4 dias)
-
-    weekday(): segunda=0 … domingo=6
-    Se hoje for sábado (5) ou domingo (6), a "próxima segunda" é usada
-    para que o lote já apareça no fim de semana de preparação.
-    """
     hoje = date.today()
     dias_ate_segunda = (7 - hoje.weekday()) % 7 if hoje.weekday() in (5, 6) else hoje.weekday()
     segunda = hoje - timedelta(days=dias_ate_segunda) if hoje.weekday() not in (5, 6) else hoje + timedelta(days=(7 - hoje.weekday()) % 7)
-    lote_inicio = segunda - timedelta(days=2)   # Sábado anterior
-    lote_fim = segunda + timedelta(days=4)       # Sexta-feira
+    lote_inicio = segunda - timedelta(days=2)
+    lote_fim = segunda + timedelta(days=4)
     return lote_inicio, lote_fim
 
 
@@ -219,85 +282,125 @@ def listar_boletos_urgentes_hoje() -> list[dict]:
 
 
 def verificar_duplicata(estabelecimento_id: int, valor: float, data_vencimento: date) -> dict | None:
-    """Retorna o boleto existente se houver um ativo com mesmos est+valor+vencimento."""
+    ph = "%s" if _USE_PG else "?"
     conn = get_connection()
-    row = conn.execute(
-        """SELECT b.id, b.valor, b.data_vencimento, b.status, e.nome AS estabelecimento
+    cur = conn.cursor()
+    cur.execute(
+        f"""SELECT b.id, b.valor, b.data_vencimento, b.status, e.nome AS estabelecimento
            FROM boletos b JOIN estabelecimentos e ON e.id = b.estabelecimento_id
-           WHERE b.estabelecimento_id = ? AND b.valor = ? AND b.data_vencimento = ?
-             AND b.status != 'Pago'
+           WHERE b.estabelecimento_id = {ph} AND b.valor = {ph} AND b.data_vencimento = {ph}
+             AND b.status != {ph}
            LIMIT 1""",
-        (estabelecimento_id, valor, data_vencimento.isoformat()),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def salvar_boleto(estabelecimento_id: int, caminho_arquivo: str, valor: float, data_vencimento: date) -> int:
-    conn = get_connection()
-    cursor = conn.execute(
-        "INSERT INTO boletos (estabelecimento_id, caminho_arquivo, valor, data_vencimento, data_envio, status) VALUES (?,?,?,?,?,'Pendente')",
-        (estabelecimento_id, caminho_arquivo, valor, data_vencimento.isoformat(), date.today().isoformat()),
+        (estabelecimento_id, valor, data_vencimento.isoformat(), "Pago"),
     )
-    boleto_id = cursor.lastrowid
-    conn.commit()
+    row = _fetchone(cur)
     conn.close()
+    return row
+
+
+def salvar_boleto(
+    estabelecimento_id: int,
+    arquivo_nome: str,
+    arquivo_tipo: str,
+    arquivo_dados: bytes,
+    valor: float,
+    data_vencimento: date,
+) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        f"""INSERT INTO boletos
+            (estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+             valor, data_vencimento, data_envio, status)
+            VALUES ({_ph(8)})""",
+        (
+            estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+            valor, data_vencimento.isoformat(), date.today().isoformat(), "Pendente",
+        ),
+    )
+    if _USE_PG:
+        cur.execute("SELECT lastval()")
+        boleto_id = cur.fetchone()[0]
+    else:
+        boleto_id = cur.lastrowid
+    _commit_close(conn)
     return boleto_id
 
 
 def atualizar_boleto(boleto_id: int, valor: float | None = None, data_vencimento: date | None = None, status: str | None = None) -> None:
+    ph = "%s" if _USE_PG else "?"
     campos, params = [], []
     if valor is not None:
-        campos.append("valor = ?")
+        campos.append(f"valor = {ph}")
         params.append(valor)
     if data_vencimento is not None:
-        campos.append("data_vencimento = ?")
+        campos.append(f"data_vencimento = {ph}")
         params.append(data_vencimento.isoformat())
     if status is not None:
-        campos.append("status = ?")
+        campos.append(f"status = {ph}")
         params.append(status)
     if not campos:
         return
     params.append(boleto_id)
     conn = get_connection()
-    conn.execute(f"UPDATE boletos SET {', '.join(campos)} WHERE id = ?", params)
-    conn.commit()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE boletos SET {', '.join(campos)} WHERE id = {ph}", params)
+    _commit_close(conn)
 
 
 def marcar_lote_em_lote(ids: list[int]) -> None:
-    """Atualiza o status de Pendente → Em Lote para os ids informados."""
     if not ids:
         return
-    placeholders = ",".join("?" * len(ids))
+    ph = "%s" if _USE_PG else "?"
+    placeholders = ", ".join([ph] * len(ids))
     conn = get_connection()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         f"UPDATE boletos SET status='Em Lote' WHERE id IN ({placeholders}) AND status='Pendente'",
         ids,
     )
-    conn.commit()
-    conn.close()
+    _commit_close(conn)
 
 
 def excluir_boleto(boleto_id: int) -> None:
+    ph = "%s" if _USE_PG else "?"
     conn = get_connection()
-    conn.execute("DELETE FROM boletos WHERE id = ?", (boleto_id,))
-    conn.commit()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute(f"DELETE FROM boletos WHERE id = {ph}", (boleto_id,))
+    _commit_close(conn)
 
 
 def get_boleto_by_id(boleto_id: int) -> dict | None:
+    ph = "%s" if _USE_PG else "?"
     conn = get_connection()
-    row = conn.execute(
-        "SELECT b.*, e.nome AS estabelecimento FROM boletos b JOIN estabelecimentos e ON e.id=b.estabelecimento_id WHERE b.id=?",
+    cur = conn.cursor()
+    cur.execute(
+        f"""SELECT b.id, b.estabelecimento_id, b.arquivo_nome, b.arquivo_tipo,
+                   b.valor, b.data_vencimento, b.data_envio, b.status,
+                   e.nome AS estabelecimento
+            FROM boletos b JOIN estabelecimentos e ON e.id=b.estabelecimento_id
+            WHERE b.id={ph}""",
         (boleto_id,),
-    ).fetchone()
+    )
+    row = _fetchone(cur)
     conn.close()
-    return dict(row) if row else None
+    return row
+
+
+def get_boleto_arquivo(boleto_id: int) -> bytes | None:
+    """Retorna apenas os bytes do arquivo (coluna pesada), separado do get_boleto_by_id."""
+    ph = "%s" if _USE_PG else "?"
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT arquivo_dados FROM boletos WHERE id={ph}", (boleto_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return bytes(row[0]) if row[0] else None
 
 
 def get_dashboard_stats() -> dict:
-    hoje = date.today()
     lote_inicio, lote_fim = calcular_lote_atual()
     rows_lote = listar_boletos_do_lote()
     urgent = listar_boletos_urgentes_hoje()
