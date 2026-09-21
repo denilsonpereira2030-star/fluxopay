@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gc
 import io
 import os
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -184,12 +186,28 @@ def gerente_salvar_boleto(
     print(f"[upload] arquivo={arquivo.filename!r} tamanho={len(conteudo)} bytes tipo={arquivo.content_type!r}", flush=True)
 
     try:
-        import gc
         nome, tipo, dados = pdf_service.processar_upload(conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream")
         del conteudo
-        db.salvar_boleto(user["estabelecimento_id"], nome, tipo, dados, valor, vencimento)
+
+        if db.supabase:
+            caminho = f"{user['estabelecimento_id']}/{uuid.uuid4()}_{nome}"
+            db.supabase.storage.from_(db.SUPABASE_BUCKET).upload(
+                path=caminho,
+                file=dados,
+                file_options={"content-type": tipo},
+            )
+            arquivo_url = db.supabase.storage.from_(db.SUPABASE_BUCKET).get_public_url(caminho)
+        else:
+            # fallback local: salva em disco para dev
+            dest = Path(db.BASE_DIR) / "uploads" / nome
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(dados)
+            arquivo_url = f"/uploads/{nome}"
+
         del dados
         gc.collect()
+
+        db.salvar_boleto(user["estabelecimento_id"], nome, arquivo_url, valor, vencimento)
     except Exception as exc:
         print(f"ERRO FATAL NO UPLOAD: {str(exc)}", flush=True)
         return _tpl(
@@ -375,17 +393,9 @@ async def ver_arquivo_financeiro(boleto_id: int, request: Request):
     if not user or user["perfil"] != "financeiro":
         raise HTTPException(403)
     boleto = db.get_boleto_by_id(boleto_id)
-    if not boleto:
-        raise HTTPException(404)
-    dados = db.get_boleto_arquivo(boleto_id)
-    if not dados:
+    if not boleto or not boleto.get("arquivo_url"):
         raise HTTPException(404, "Arquivo não encontrado.")
-    fname = boleto.get("arquivo_nome") or "boleto.pdf"
-    return StreamingResponse(
-        io.BytesIO(dados),
-        media_type=boleto.get("arquivo_tipo") or "application/pdf",
-        headers={"Content-Disposition": f"inline; filename={fname}"},
-    )
+    return RedirectResponse(url=boleto["arquivo_url"], status_code=302)
 
 
 @app.get("/gerente/boleto/{boleto_id}/arquivo")
@@ -394,15 +404,9 @@ async def ver_arquivo_gerente(boleto_id: int, request: Request):
     boleto = db.get_boleto_by_id(boleto_id)
     if not boleto or boleto["estabelecimento_id"] != user["estabelecimento_id"]:
         raise HTTPException(403)
-    dados = db.get_boleto_arquivo(boleto_id)
-    if not dados:
+    if not boleto.get("arquivo_url"):
         raise HTTPException(404, "Arquivo não encontrado.")
-    fname = boleto.get("arquivo_nome") or "boleto.pdf"
-    return StreamingResponse(
-        io.BytesIO(dados),
-        media_type=boleto.get("arquivo_tipo") or "application/pdf",
-        headers={"Content-Disposition": f"inline; filename={fname}"},
-    )
+    return RedirectResponse(url=boleto["arquivo_url"], status_code=302)
 
 
 # ── BOLETOS POR ESTABELECIMENTO ───────────────────────────────────────────────

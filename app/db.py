@@ -10,7 +10,6 @@ from typing import Any
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
-# Render às vezes fornece postgres:// — psycopg2 exige postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -19,6 +18,19 @@ _USE_PG = bool(DATABASE_URL)
 if not _USE_PG:
     _db_path = BASE_DIR / "uploads" / "contas.db"
     _db_path.parent.mkdir(parents=True, exist_ok=True)
+
+# ── Supabase Storage ──────────────────────────────────────────────────────────
+_supabase_url = os.getenv("SUPABASE_URL")
+_supabase_key = os.getenv("SUPABASE_KEY")
+supabase = None
+if _supabase_url and _supabase_key:
+    try:
+        from supabase import create_client
+        supabase = create_client(_supabase_url, _supabase_key)
+    except Exception as _e:
+        print(f"[db] Supabase indisponível: {_e}", flush=True)
+
+SUPABASE_BUCKET = "boletos"
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
@@ -185,8 +197,7 @@ def init_db() -> None:
             id {serial} {'PRIMARY KEY' if _USE_PG else ''},
             estabelecimento_id INTEGER NOT NULL,
             arquivo_nome TEXT,
-            arquivo_tipo TEXT,
-            arquivo_dados {blob},
+            arquivo_url TEXT,
             valor REAL NOT NULL,
             data_vencimento TEXT NOT NULL,
             data_envio TEXT NOT NULL,
@@ -194,13 +205,29 @@ def init_db() -> None:
         )
     """)
 
-    # migração: adiciona colunas BLOB em banco SQLite legado
-    if not _USE_PG:
+    # migração de schema: adiciona colunas ausentes, remove BLOB pesado
+    if _USE_PG:
+        for col, definition in [
+            ("arquivo_nome", "TEXT"),
+            ("arquivo_url", "TEXT"),
+            ("status", "TEXT DEFAULT 'Pendente'"),
+        ]:
+            cur.execute(
+                f"ALTER TABLE boletos ADD COLUMN IF NOT EXISTS {col} {definition}"
+            )
+        # remove coluna BLOB se ainda existir (migração de versão anterior)
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='boletos' AND column_name='arquivo_dados'
+        """)
+        if cur.fetchone():
+            cur.execute("ALTER TABLE boletos DROP COLUMN arquivo_dados")
+            cur.execute("ALTER TABLE boletos DROP COLUMN IF EXISTS arquivo_tipo")
+    else:
         cols = [r["name"] for r in conn.execute("PRAGMA table_info(boletos)").fetchall()]
         for col, definition in [
             ("arquivo_nome", "TEXT"),
-            ("arquivo_tipo", "TEXT"),
-            ("arquivo_dados", "BLOB"),
+            ("arquivo_url", "TEXT"),
             ("status", "TEXT DEFAULT 'Pendente'"),
         ]:
             if col not in cols:
@@ -257,7 +284,7 @@ def listar_boletos(
     ph = "%s" if _USE_PG else "?"
     query = """
         SELECT b.id, b.estabelecimento_id, e.nome AS estabelecimento,
-               b.arquivo_nome, b.arquivo_tipo,
+               b.arquivo_nome, b.arquivo_url,
                b.valor, b.data_vencimento, b.data_envio, b.status
         FROM boletos b
         INNER JOIN estabelecimentos e ON e.id = b.estabelecimento_id
@@ -353,8 +380,7 @@ def verificar_duplicata(estabelecimento_id: int, valor: float, data_vencimento: 
 def salvar_boleto(
     estabelecimento_id: int,
     arquivo_nome: str,
-    arquivo_tipo: str,
-    arquivo_dados: bytes,
+    arquivo_url: str,
     valor: float,
     data_vencimento: date,
 ) -> int:
@@ -363,11 +389,11 @@ def salvar_boleto(
         cur = conn.cursor()
         cur.execute(
             f"""INSERT INTO boletos
-                (estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+                (estabelecimento_id, arquivo_nome, arquivo_url,
                  valor, data_vencimento, data_envio, status)
-                VALUES ({_ph(8)})""",
+                VALUES ({_ph(7)})""",
             (
-                estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+                estabelecimento_id, arquivo_nome, arquivo_url,
                 valor, data_vencimento.isoformat(), date.today().isoformat(), "Pendente",
             ),
         )
@@ -431,7 +457,7 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        f"""SELECT b.id, b.estabelecimento_id, b.arquivo_nome, b.arquivo_tipo,
+        f"""SELECT b.id, b.estabelecimento_id, b.arquivo_nome, b.arquivo_url,
                    b.valor, b.data_vencimento, b.data_envio, b.status,
                    e.nome AS estabelecimento
             FROM boletos b JOIN estabelecimentos e ON e.id=b.estabelecimento_id
@@ -441,19 +467,6 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
     row = _fetchone(cur)
     _release(conn)
     return row
-
-
-def get_boleto_arquivo(boleto_id: int) -> bytes | None:
-    """Retorna apenas os bytes do arquivo (coluna pesada), separado do get_boleto_by_id."""
-    ph = "%s" if _USE_PG else "?"
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(f"SELECT arquivo_dados FROM boletos WHERE id={ph}", (boleto_id,))
-    row = cur.fetchone()
-    _release(conn)
-    if row is None:
-        return None
-    return bytes(row[0]) if row[0] else None
 
 
 def get_dashboard_stats() -> dict:
