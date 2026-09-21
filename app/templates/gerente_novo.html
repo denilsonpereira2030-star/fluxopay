@@ -52,28 +52,34 @@
     <div class="form-group">
       <label class="form-label">Arquivo do Boleto</label>
 
-      <!-- opções de input separadas em dois botões visuais -->
+      <!-- input único que o backend lê — hidden, preenchido pelos dois botões -->
+      <input type="file" name="arquivo" id="arquivo"
+             accept=".pdf,.png,.jpg,.jpeg,image/*"
+             style="display:none;">
+
       <div class="upload-options" id="upload-options">
 
         <!-- PDF / imagem da galeria -->
-        <label class="upload-opt" id="opt-file">
-          <input type="file" name="arquivo" id="arquivo"
+        <button type="button" class="upload-opt" id="opt-file"
+                onclick="document.getElementById('arquivo-trigger-file').click()">
+          <input type="file" id="arquivo-trigger-file"
                  accept=".pdf,.png,.jpg,.jpeg"
-                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+                 style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           <span class="opt-label">Selecionar PDF<br>ou Imagem</span>
           <span class="opt-sub">da galeria ou arquivos</span>
-        </label>
+        </button>
 
         <!-- câmera — filtro scanner aplicado automaticamente -->
-        <label class="upload-opt" id="opt-camera">
-          <input type="file" name="arquivo" id="arquivo-camera"
+        <button type="button" class="upload-opt" id="opt-camera"
+                onclick="document.getElementById('arquivo-trigger-camera').click()">
+          <input type="file" id="arquivo-trigger-camera"
                  accept="image/*" capture="environment"
-                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+                 style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="15" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M9 6l1.5-2h3L15 6"/></svg>
           <span class="opt-label">🖨️ Scannear Boleto<br>via Câmera</span>
           <span class="opt-sub">filtro scanner automático</span>
-        </label>
+        </button>
 
       </div>
 
@@ -236,8 +242,12 @@
 const hoje = "{{ hoje.isoformat() }}";
 const estNome = "{{ est_nome }}";
 
-const inputFile   = document.getElementById('arquivo');
-const inputCamera = document.getElementById('arquivo-camera');
+// input real que o backend recebe (único name="arquivo")
+const inputArquivo   = document.getElementById('arquivo');
+// triggers visuais (não têm name, nunca chegam ao servidor)
+const triggerFile    = document.getElementById('arquivo-trigger-file');
+const triggerCamera  = document.getElementById('arquivo-trigger-camera');
+
 const optFile     = document.getElementById('opt-file');
 const optCamera   = document.getElementById('opt-camera');
 const selectedDiv = document.getElementById('upload-selected');
@@ -249,51 +259,45 @@ const whatsappLink = document.getElementById('whatsapp-link');
 const valorInput  = document.getElementById('valor');
 const vencInput   = document.getElementById('data_vencimento');
 
-// ── active file tracker ────────────────────────────────────────
-// O form só envia um campo "arquivo"; quando o gerente usa a câmera,
-// copiamos o FileList para o input principal antes do submit.
-let activeSource = null; // 'file' | 'camera'
+function transferirParaInput(file) {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  inputArquivo.files = dt.files;
+  optFile.classList.remove('selected');
+  optCamera.classList.remove('selected');
+}
 
-function markSelected(source, name) {
-  activeSource = source;
+function markSelected(source, file) {
+  transferirParaInput(file);
   optFile.classList.toggle('selected', source === 'file');
   optCamera.classList.toggle('selected', source === 'camera');
-  selectedName.textContent = name;
+  selectedName.textContent = file.name;
   selectedDiv.hidden = false;
 }
 
 function clearSelection() {
-  activeSource = null;
   optFile.classList.remove('selected');
   optCamera.classList.remove('selected');
   selectedDiv.hidden = true;
-  inputFile.value = '';
-  inputCamera.value = '';
+  inputArquivo.value = '';
+  triggerFile.value = '';
+  triggerCamera.value = '';
 }
 
-inputFile.addEventListener('change', () => {
-  if (inputFile.files[0]) markSelected('file', inputFile.files[0].name);
+triggerFile.addEventListener('change', () => {
+  if (triggerFile.files[0]) markSelected('file', triggerFile.files[0]);
 });
 
-inputCamera.addEventListener('change', () => {
-  if (inputCamera.files[0]) markSelected('camera', inputCamera.files[0].name);
+triggerCamera.addEventListener('change', () => {
+  if (triggerCamera.files[0]) markSelected('camera', triggerCamera.files[0]);
 });
 
 clearBtn.addEventListener('click', clearSelection);
 
-// Antes do submit: se a câmera foi usada, transferir o arquivo
-// para o campo "arquivo" que o backend espera.
 form.addEventListener('submit', (e) => {
-  if (activeSource === null) {
+  if (!inputArquivo.files[0]) {
     e.preventDefault();
     alert('Selecione um arquivo ou scaneie um boleto antes de salvar.');
-    return;
-  }
-  if (activeSource === 'camera' && inputCamera.files[0]) {
-    // Criar um DataTransfer para injetar o arquivo no input principal
-    const dt = new DataTransfer();
-    dt.items.add(inputCamera.files[0]);
-    inputFile.files = dt.files;
   }
 });
 
