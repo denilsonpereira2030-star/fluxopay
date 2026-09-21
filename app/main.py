@@ -172,11 +172,24 @@ def gerente_salvar_boleto(
     if not conteudo:
         return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Selecione um arquivo antes de salvar.", status_code=422)
 
+    _MAX_UPLOAD = 5 * 1024 * 1024  # 5 MB
+    if len(conteudo) > _MAX_UPLOAD:
+        return _tpl(
+            request, "gerente_novo.html", user=user, est_nome=est_nome,
+            hoje=date.today(),
+            error=f"Arquivo muito grande ({len(conteudo) // 1024} KB). Limite máximo: 5 MB.",
+            status_code=413,
+        )
+
     print(f"[upload] arquivo={arquivo.filename!r} tamanho={len(conteudo)} bytes tipo={arquivo.content_type!r}", flush=True)
 
     try:
+        import gc
         nome, tipo, dados = pdf_service.processar_upload(conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream")
+        del conteudo
         db.salvar_boleto(user["estabelecimento_id"], nome, tipo, dados, valor, vencimento)
+        del dados
+        gc.collect()
     except Exception as exc:
         print(f"ERRO FATAL NO UPLOAD: {str(exc)}", flush=True)
         return _tpl(
