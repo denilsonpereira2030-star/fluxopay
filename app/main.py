@@ -191,11 +191,15 @@ def gerente_salvar_boleto(
 
         if db.supabase:
             caminho = f"{user['estabelecimento_id']}/{uuid.uuid4()}_{nome}"
-            db.supabase.storage.from_(db.SUPABASE_BUCKET).upload(
-                path=caminho,
-                file=dados,
-                file_options={"content-type": tipo},
-            )
+            try:
+                db.supabase.storage.from_(db.SUPABASE_BUCKET).upload(
+                    path=caminho,
+                    file=dados,
+                    file_options={"content-type": tipo, "upsert": "true"},
+                )
+            except Exception as storage_exc:
+                print(f"[upload] StorageApiError detalhado: {storage_exc!r}", flush=True)
+                raise
             arquivo_url = db.supabase.storage.from_(db.SUPABASE_BUCKET).get_public_url(caminho)
         else:
             # fallback local: salva em disco para dev
