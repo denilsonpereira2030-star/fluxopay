@@ -25,11 +25,44 @@ STATUSES = ["Pendente", "Em Lote", "Pago"]
 
 # ── conexão ───────────────────────────────────────────────────────────────────
 
+# Pool de conexões para PostgreSQL: evita usar conexões que o Neon fechou
+# por inatividade (principal causa de 502). keepalives detectam conexões mortas
+# antes de tentar usá-las; minconn=1/maxconn=5 adequado para free tier.
+_pg_pool = None
+
+def _get_pg_pool():
+    global _pg_pool
+    if _pg_pool is None:
+        import psycopg2.pool
+        _pg_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=1,
+            maxconn=5,
+            dsn=DATABASE_URL,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=3,
+        )
+    return _pg_pool
+
+
 def _pg_conn():
-    import psycopg2
-    import psycopg2.extras
-    conn = psycopg2.connect(DATABASE_URL)
+    pool = _get_pg_pool()
+    conn = pool.getconn()
+    # Valida se a conexão ainda está viva; se não, reconecta automaticamente
+    try:
+        conn.cursor().execute("SELECT 1")
+    except Exception:
+        pool.putconn(conn, close=True)
+        conn = pool.getconn()
     return conn
+
+
+def _pg_putconn(conn, close: bool = False) -> None:
+    try:
+        _get_pg_pool().putconn(conn, close=close)
+    except Exception:
+        pass
 
 
 def get_connection():
@@ -64,9 +97,28 @@ def _fetchone(cursor) -> dict | None:
     return dict(row) if row else None
 
 
+def _release(conn, error: bool = False) -> None:
+    """Devolve a conexão ao pool (PG) ou fecha (SQLite)."""
+    if _USE_PG:
+        if error:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        _pg_putconn(conn, close=error)
+    else:
+        if not error:
+            conn.commit()
+        conn.close()
+
+
 def _commit_close(conn) -> None:
-    conn.commit()
-    conn.close()
+    if _USE_PG:
+        conn.commit()
+        _pg_putconn(conn)
+    else:
+        conn.commit()
+        conn.close()
 
 
 # ── inicialização do schema ───────────────────────────────────────────────────
@@ -168,7 +220,7 @@ def authenticate_user(login: str, senha: str) -> dict | None:
         (login, senha),
     )
     row = _fetchone(cur)
-    conn.close()
+    _release(conn)
     return row
 
 
@@ -181,7 +233,7 @@ def get_estabelecimento_nome(estabelecimento_id: int | None) -> str:
     cur = conn.cursor()
     cur.execute(f"SELECT nome FROM estabelecimentos WHERE id={_ph()}", (estabelecimento_id,))
     row = _fetchone(cur)
-    conn.close()
+    _release(conn)
     return row["nome"] if row else ""
 
 
@@ -190,7 +242,7 @@ def listar_estabelecimentos() -> list[dict]:
     cur = conn.cursor()
     cur.execute("SELECT id, nome FROM estabelecimentos ORDER BY id")
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return rows
 
 
@@ -233,7 +285,7 @@ def listar_boletos(
     cur = conn.cursor()
     cur.execute(query, params)
     rows = _fetchall(cur)
-    conn.close()
+    _release(conn)
     return rows
 
 
@@ -294,7 +346,7 @@ def verificar_duplicata(estabelecimento_id: int, valor: float, data_vencimento: 
         (estabelecimento_id, valor, data_vencimento.isoformat(), "Pago"),
     )
     row = _fetchone(cur)
-    conn.close()
+    _release(conn)
     return row
 
 
@@ -383,7 +435,7 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
         (boleto_id,),
     )
     row = _fetchone(cur)
-    conn.close()
+    _release(conn)
     return row
 
 
@@ -394,7 +446,7 @@ def get_boleto_arquivo(boleto_id: int) -> bytes | None:
     cur = conn.cursor()
     cur.execute(f"SELECT arquivo_dados FROM boletos WHERE id={ph}", (boleto_id,))
     row = cur.fetchone()
-    conn.close()
+    _release(conn)
     if row is None:
         return None
     return bytes(row[0]) if row[0] else None
