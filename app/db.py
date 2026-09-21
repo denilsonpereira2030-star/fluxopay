@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -7,8 +8,16 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-DB_PATH = BASE_DIR / "contas.db"
+
+# No Render, /app/uploads é o ponto de montagem do disco persistente.
+# Em desenvolvimento local, usa a pasta uploads/ na raiz do projeto.
+if os.environ.get("RENDER") or Path("/app/uploads").exists():
+    UPLOADS_DIR = Path("/app/uploads")
+else:
+    UPLOADS_DIR = BASE_DIR / "uploads"
+
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = UPLOADS_DIR / "contas.db"
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
@@ -20,7 +29,6 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     conn = get_connection()
 
     conn.execute("""
