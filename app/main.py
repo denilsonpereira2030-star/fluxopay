@@ -142,7 +142,7 @@ async def gerente_novo(request: Request):
 
 
 @app.post("/gerente/boleto", response_class=HTMLResponse)
-async def gerente_salvar_boleto(
+def gerente_salvar_boleto(
     request: Request,
     valor: float = Form(...),
     data_vencimento: str = Form(...),
@@ -156,7 +156,6 @@ async def gerente_salvar_boleto(
     vencimento = date.fromisoformat(data_vencimento)
     est_nome = db.get_estabelecimento_nome(user["estabelecimento_id"])
 
-    # Verificar duplicata antes de ler o arquivo (pesado)
     if not confirmar_duplicata:
         dup = db.verificar_duplicata(user["estabelecimento_id"], valor, vencimento)
         if dup:
@@ -169,21 +168,17 @@ async def gerente_salvar_boleto(
                 status_code=200,
             )
 
-    sem_arquivo = not arquivo or not getattr(arquivo, "filename", None)
-    if sem_arquivo:
+    conteudo = arquivo.file.read() if arquivo and arquivo.filename else None
+    if not conteudo:
         return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Selecione um arquivo antes de salvar.", status_code=422)
 
-    content = await arquivo.read()
-    if not content:
-        return _tpl(request, "gerente_novo.html", user=user, est_nome=est_nome, hoje=date.today(), error="Arquivo vazio. Selecione um arquivo válido.", status_code=422)
-
-    print(f"[upload] arquivo={arquivo.filename!r} tamanho={len(content)} bytes tipo={arquivo.content_type!r}")
+    print(f"[upload] arquivo={arquivo.filename!r} tamanho={len(conteudo)} bytes tipo={arquivo.content_type!r}", flush=True)
 
     try:
-        nome, tipo, dados = pdf_service.processar_upload(content, arquivo.filename, arquivo.content_type or "application/octet-stream")
+        nome, tipo, dados = pdf_service.processar_upload(conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream")
         db.salvar_boleto(user["estabelecimento_id"], nome, tipo, dados, valor, vencimento)
     except Exception as exc:
-        print(f"[upload] ERRO ao salvar boleto: {exc}")
+        print(f"ERRO FATAL NO UPLOAD: {str(exc)}", flush=True)
         return _tpl(
             request, "gerente_novo.html", user=user, est_nome=est_nome,
             hoje=date.today(),

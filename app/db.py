@@ -359,24 +359,28 @@ def salvar_boleto(
     data_vencimento: date,
 ) -> int:
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        f"""INSERT INTO boletos
-            (estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
-             valor, data_vencimento, data_envio, status)
-            VALUES ({_ph(8)})""",
-        (
-            estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
-            valor, data_vencimento.isoformat(), date.today().isoformat(), "Pendente",
-        ),
-    )
-    if _USE_PG:
-        cur.execute("SELECT lastval()")
-        boleto_id = cur.fetchone()[0]
-    else:
-        boleto_id = cur.lastrowid
-    _commit_close(conn)
-    return boleto_id
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""INSERT INTO boletos
+                (estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+                 valor, data_vencimento, data_envio, status)
+                VALUES ({_ph(8)})""",
+            (
+                estabelecimento_id, arquivo_nome, arquivo_tipo, arquivo_dados,
+                valor, data_vencimento.isoformat(), date.today().isoformat(), "Pendente",
+            ),
+        )
+        if _USE_PG:
+            cur.execute("SELECT lastval()")
+            boleto_id = cur.fetchone()[0]
+        else:
+            boleto_id = cur.lastrowid
+        _commit_close(conn)
+        return boleto_id
+    except Exception:
+        _release(conn, error=True)
+        raise
 
 
 def atualizar_boleto(boleto_id: int, valor: float | None = None, data_vencimento: date | None = None, status: str | None = None) -> None:
