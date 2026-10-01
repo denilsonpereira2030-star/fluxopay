@@ -273,11 +273,15 @@ def _init_db_inner() -> None:
 # ── autenticação ─────────────────────────────────────────────────────────────
 
 def authenticate_user(login: str, senha: str) -> dict | None:
+    import hashlib
+    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
     conn = get_connection()
     cur = conn.cursor()
+    # Aceita senha em texto plano (legado) ou SHA-256 (novos gerentes)
     cur.execute(
-        f"SELECT id, estabelecimento_id, login, perfil FROM usuarios WHERE login={_ph()} AND senha={_ph()}",
-        (login, senha),
+        f"""SELECT id, estabelecimento_id, login, perfil FROM usuarios
+            WHERE login={_ph()} AND (senha={_ph()} OR senha={_ph()})""",
+        (login, senha, senha_hash),
     )
     row = _fetchone(cur)
     _release(conn)
@@ -304,6 +308,61 @@ def listar_estabelecimentos() -> list[dict]:
     rows = _fetchall(cur)
     _release(conn)
     return rows
+
+
+def listar_usuarios_gerentes() -> list[dict]:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT u.id, u.login, u.perfil, u.estabelecimento_id, e.nome AS estabelecimento
+           FROM usuarios u
+           LEFT JOIN estabelecimentos e ON e.id = u.estabelecimento_id
+           WHERE u.perfil = 'gerente'
+           ORDER BY e.nome, u.login"""
+    )
+    rows = _fetchall(cur)
+    _release(conn)
+    return rows
+
+
+def criar_estabelecimento(nome: str) -> int:
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"INSERT INTO estabelecimentos (nome) VALUES ({_ph()})", (nome.strip(),))
+        if _USE_PG:
+            cur.execute("SELECT lastval()")
+            novo_id = cur.fetchone()[0]
+        else:
+            novo_id = cur.lastrowid
+        _commit_close(conn)
+        return novo_id
+    except Exception:
+        _release(conn, error=True)
+        raise
+
+
+def criar_gerente(login: str, senha: str, estabelecimento_id: int) -> int:
+    import hashlib
+    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""INSERT INTO usuarios (estabelecimento_id, login, senha, perfil)
+                VALUES ({_ph(4)})""",
+            (estabelecimento_id, login.strip(), senha_hash, "gerente"),
+        )
+        if _USE_PG:
+            cur.execute("SELECT lastval()")
+            novo_id = cur.fetchone()[0]
+        else:
+            novo_id = cur.lastrowid
+        _commit_close(conn)
+        return novo_id
+    except Exception:
+        _release(conn, error=True)
+        raise
 
 
 # ── boletos ───────────────────────────────────────────────────────────────────

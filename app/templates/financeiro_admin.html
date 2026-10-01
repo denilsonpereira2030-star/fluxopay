@@ -1,0 +1,109 @@
+{% extends "fin_layout.html" %}
+{% set active = 'admin' %}
+{% block title %}Admin{% endblock %}
+
+{% block fin_content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <div class="page-eyebrow">Sistema</div>
+    <div class="page-title">Gerenciar Lojas & Gerentes</div>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger" style="margin-bottom:16px;">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  {{ error }}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+  <!-- Cadastrar gerente -->
+  <div class="card">
+    <div class="section-header" style="margin-bottom:18px;">
+      <div class="section-title">Novo Gerente</div>
+    </div>
+    <form method="post" action="/financeiro/admin/gerente" autocomplete="off">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+
+        <div class="form-group">
+          <label class="form-label">Nome / Login</label>
+          <input class="form-control" type="text" name="login" placeholder="ex: gerente4" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Senha</label>
+          <input class="form-control" type="password" name="senha" placeholder="Mínimo 4 caracteres" minlength="4" required autocomplete="new-password">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Estabelecimento</label>
+          <select class="form-control" name="estabelecimento_id" required>
+            <option value="" disabled selected>Selecione…</option>
+            {% for est in estabelecimentos %}
+            <option value="{{ est.id }}">{{ est.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <hr class="divider" style="margin:4px 0;">
+
+        <details style="margin-bottom:2px;">
+          <summary style="cursor:pointer;font-size:12px;color:var(--txt-3);font-weight:600;letter-spacing:0.04em;list-style:none;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Loja ainda não cadastrada? Crie aqui
+          </summary>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;">
+            <div class="form-group">
+              <label class="form-label">Nome da nova loja</label>
+              <input class="form-control" type="text" name="nova_loja" placeholder="ex: Posto Centro" autocomplete="off">
+            </div>
+            <p style="font-size:11px;color:var(--txt-3);">Preencha o nome acima e deixe "Estabelecimento" vazio — a loja será criada automaticamente e vinculada ao gerente.</p>
+          </div>
+        </details>
+
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Cadastrar Gerente
+        </button>
+
+      </div>
+    </form>
+  </div>
+
+  <!-- Lista de gerentes por estabelecimento -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    {% for est in estabelecimentos %}
+    {% set gerentes_est = gerentes | selectattr('estabelecimento_id', 'equalto', est.id) | list %}
+    <div class="card">
+      <div class="section-header" style="margin-bottom:12px;">
+        <div class="section-title">{{ est.nome }}</div>
+        <span class="badge badge-em-lote" style="font-size:9px;">{{ gerentes_est | length }} gerente{{ 's' if gerentes_est | length != 1 }}</span>
+      </div>
+      {% if gerentes_est %}
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        {% for g in gerentes_est %}
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--lift);border-radius:var(--r-md);">
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--blue-dim);border:1px solid var(--blue-glow);display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:700;font-size:12px;color:var(--blue-hi);flex-shrink:0;">{{ g.login[0].upper() }}</div>
+          <span style="font-size:13px;font-weight:600;color:var(--txt-1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ g.login }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:12px;color:var(--txt-3);padding:8px 0;">Nenhum gerente vinculado.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<style>
+@media (max-width: 860px) {
+  div[style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+{% endblock %}

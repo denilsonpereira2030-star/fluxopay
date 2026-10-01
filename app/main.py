@@ -221,17 +221,17 @@ def gerente_salvar_boleto(
             status_code=500,
         )
 
-    return RedirectResponse("/gerente/contas?ok=1", status_code=303)
+    return RedirectResponse("/gerente/contas?msg=Boleto+enviado+com+sucesso%21", status_code=303)
 
 
 @app.get("/gerente/contas", response_class=HTMLResponse)
-async def gerente_contas(request: Request, ok: str = ""):
+async def gerente_contas(request: Request, ok: str = "", msg: str = ""):
     user = _require_user(request)
     if user["perfil"] != "gerente":
         return RedirectResponse("/financeiro", status_code=303)
     rows = db.listar_boletos(estabelecimento_id=user["estabelecimento_id"])
     est_nome = db.get_estabelecimento_nome(user["estabelecimento_id"])
-    return _tpl(request, "gerente_contas.html", user=user, est_nome=est_nome, boletos=rows, success=bool(ok), hoje=date.today().isoformat())
+    return _tpl(request, "gerente_contas.html", user=user, est_nome=est_nome, boletos=rows, success=bool(ok or msg), hoje=date.today().isoformat())
 
 
 @app.get("/gerente/boleto/{boleto_id}/editar", response_class=HTMLResponse)
@@ -251,7 +251,7 @@ async def gerente_editar_post(boleto_id: int, request: Request, valor: float = F
     if not boleto or boleto["estabelecimento_id"] != user["estabelecimento_id"] or boleto["status"] != "Pendente":
         raise HTTPException(403)
     db.atualizar_boleto(boleto_id, valor=valor, data_vencimento=date.fromisoformat(data_vencimento))
-    return RedirectResponse("/gerente/contas?ok=1", status_code=303)
+    return RedirectResponse("/gerente/contas?msg=Boleto+atualizado+com+sucesso%21", status_code=303)
 
 
 @app.post("/gerente/boleto/{boleto_id}/excluir")
@@ -317,7 +317,8 @@ async def financeiro_status(boleto_id: int, request: Request, status: str = Form
         raise HTTPException(400)
     db.atualizar_boleto(boleto_id, status=status)
     redirect = origem if origem in ("/financeiro", "/financeiro/lote", "/financeiro/historico") else "/financeiro"
-    return RedirectResponse(redirect, status_code=303)
+    sep = "&" if "?" in redirect else "?"
+    return RedirectResponse(f"{redirect}{sep}msg=Status+atualizado+com+sucesso%21", status_code=303)
 
 
 @app.post("/financeiro/boleto/{boleto_id}/editar")
@@ -457,6 +458,57 @@ async def financeiro_boletos(
         mes_sel=mes_sel, ano_sel=ano_sel,
         total_geral_qtd=total_geral_qtd, total_geral_valor=total_geral_valor,
         hoje=date.today().isoformat(),
+    )
+
+
+@app.get("/financeiro/admin", response_class=HTMLResponse)
+async def financeiro_admin(request: Request, error: str = ""):
+    user = _require_financeiro(request)
+    estabelecimentos = db.listar_estabelecimentos()
+    gerentes = db.listar_usuarios_gerentes()
+    return _tpl(request, "financeiro_admin.html", user=user,
+                estabelecimentos=estabelecimentos, gerentes=gerentes,
+                error=error)
+
+
+@app.post("/financeiro/admin/gerente")
+async def financeiro_admin_criar_gerente(
+    request: Request,
+    login: str = Form(...),
+    senha: str = Form(...),
+    estabelecimento_id: str = Form(""),
+    nova_loja: str = Form(""),
+):
+    _require_financeiro(request)
+
+    est_id_final: int | None = None
+    if nova_loja.strip() and not estabelecimento_id:
+        try:
+            est_id_final = db.criar_estabelecimento(nova_loja.strip())
+        except Exception:
+            return RedirectResponse(
+                f"/financeiro/admin?error=Erro+ao+criar+a+loja+%22{nova_loja}%22.+Verifique+se+o+nome+já+existe.",
+                status_code=303,
+            )
+    elif estabelecimento_id.isdigit():
+        est_id_final = int(estabelecimento_id)
+    else:
+        return RedirectResponse(
+            "/financeiro/admin?error=Selecione+um+estabelecimento+ou+informe+o+nome+de+uma+nova+loja.",
+            status_code=303,
+        )
+
+    try:
+        db.criar_gerente(login, senha, est_id_final)
+    except Exception:
+        return RedirectResponse(
+            f"/financeiro/admin?error=Login+%22{login}%22+já+existe.+Escolha+outro.",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        f"/financeiro/admin?msg=Gerente+%22{login}%22+cadastrado+com+sucesso%21",
+        status_code=303,
     )
 
 
