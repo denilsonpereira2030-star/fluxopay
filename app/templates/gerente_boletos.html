@@ -80,7 +80,7 @@
       </div>
       <div style="font-size:10.5px;color:var(--txt-3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
         <a href="/financeiro/boleto/{{ b.id }}/arquivo" target="_blank" style="color:var(--blue-hi);text-decoration:none;">
-          ↗ {{ b.caminho_arquivo.split('/')[-1] | truncate(34, True, '…') }}
+          ↗ {{ (b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or (b.caminho_arquivo.split('/')[-1] if b.caminho_arquivo else 'Arquivo')) | truncate(34, True, '…') }}
         </a>
       </div>
     </div>

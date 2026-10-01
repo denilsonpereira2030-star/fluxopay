@@ -95,9 +95,9 @@
           </td>
           <td><span class="badge badge-{{ sc }}">{{ b.status }}</span></td>
           <td class="td-file">
-            <a href="/financeiro/boleto/{{ b.id }}/arquivo" class="file-link" title="{{ b.caminho_arquivo.split('/')[-1] }}" target="_blank">
+            <a href="/financeiro/boleto/{{ b.id }}/arquivo" class="file-link" title="{{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or (b.caminho_arquivo.split('/')[-1] if b.caminho_arquivo else 'Arquivo') }}" target="_blank">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span>{{ b.caminho_arquivo.split('/')[-1] | truncate(22, True, '…') }}</span>
+              <span>{{ (b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or (b.caminho_arquivo.split('/')[-1] if b.caminho_arquivo else 'Arquivo')) | truncate(22, True, '…') }}</span>
             </a>
           </td>
           <td>

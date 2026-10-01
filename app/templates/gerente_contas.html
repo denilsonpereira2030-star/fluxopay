@@ -64,7 +64,7 @@
       </div>
       <span class="badge badge-{{ sc }}">{{ b.status }}</span>
     </div>
-    <div class="bmc-filename">{{ b.caminho_arquivo.split('/')[-1] }}</div>
+    <div class="bmc-filename">{{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or (b.caminho_arquivo.split('/')[-1] if b.caminho_arquivo else 'Arquivo') }}</div>
     {% if b.status == 'Pendente' %}
     <div class="bmc-actions">
       <a href="/gerente/boleto/{{ b.id }}/editar" class="btn btn-ghost btn-sm">
