@@ -104,7 +104,7 @@ async def login_post(
     senha: str = Form(...),
     remember: str = Form(""),
 ):
-    user = db.authenticate_user(login.strip(), senha)
+    user = db.authenticate_user(login.strip().lower(), senha)
     if not user:
         return _tpl(request, "login.html", error="Usuário ou senha incorretos.", status_code=401)
     token = _make_token()

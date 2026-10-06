@@ -288,28 +288,46 @@ def _init_db_inner() -> None:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
         conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
 
-    # Garante usuário pedro/dono depois de expandir o CHECK constraint
-    ph1 = "%s" if _USE_PG else "?"
-    cur.execute(f"SELECT id, perfil FROM usuarios WHERE login={ph1}", ("pedro",))
-    row_pedro = cur.fetchone()
-    if not row_pedro:
-        cur.execute(
-            f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
-            (None, "pedro", "pedro123", "dono"),
-        )
-    else:
-        perfil_atual = row_pedro[1] if isinstance(row_pedro, tuple) else row_pedro["perfil"]
-        if perfil_atual != "dono":
-            cur.execute(f"UPDATE usuarios SET perfil={ph1} WHERE login={ph1}", ("dono", "pedro"))
-
     conn.commit()
     conn.close()
+
+    # Executado sempre, independente de o schema já existir
+    garantir_usuario_dono()
+
+
+# ── garantia do usuário dono ─────────────────────────────────────────────────
+
+def garantir_usuario_dono() -> None:
+    """Sempre executado no boot: UPSERT do pedro com perfil dono e hash correto."""
+    import hashlib
+    senha_hash = hashlib.sha256("pedro123".encode()).hexdigest()
+    ph = "%s" if _USE_PG else "?"
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(f"SELECT id FROM usuarios WHERE login={ph}", ("pedro",))
+        existe = cur.fetchone()
+        if existe:
+            cur.execute(
+                f"UPDATE usuarios SET senha={ph}, perfil={ph} WHERE login={ph}",
+                (senha_hash, "dono", "pedro"),
+            )
+        else:
+            cur.execute(
+                f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
+                (None, "pedro", senha_hash, "dono"),
+            )
+        _commit_close(conn)
+        print("Usuário Pedro garantido no banco de dados com sucesso.", flush=True)
+    except Exception as exc:
+        print(f"[db] garantir_usuario_dono falhou: {exc}", flush=True)
 
 
 # ── autenticação ─────────────────────────────────────────────────────────────
 
 def authenticate_user(login: str, senha: str) -> dict | None:
     import hashlib
+    login = login.strip().lower()
     senha_hash = hashlib.sha256(senha.encode()).hexdigest()
     conn = get_connection()
     cur = conn.cursor()
