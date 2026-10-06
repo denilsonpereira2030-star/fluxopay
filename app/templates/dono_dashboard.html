@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dashboard · Pedro · FluxoPay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── tokens (idênticos ao base.html) ── */
+:root{--void:#080D1A;--ground:#0C1322;--surface:#121C2E;--lift:#1A2640;--border:rgba(99,130,185,0.14);--border-hi:rgba(99,130,185,0.28);--blue:#2563EB;--blue-hi:#3B82F6;--blue-glow:rgba(37,99,235,0.20);--blue-dim:rgba(37,99,235,0.12);--amber:#F59E0B;--amber-dim:rgba(245,158,11,0.12);--amber-bdr:rgba(245,158,11,0.30);--emerald:#10B981;--emerald-dim:rgba(16,185,129,0.10);--emerald-bdr:rgba(16,185,129,0.28);--red:#EF4444;--red-dim:rgba(239,68,68,0.10);--red-bdr:rgba(239,68,68,0.28);--txt-1:#F1F5F9;--txt-2:#94A3B8;--txt-3:#64748B;--txt-inv:#0C1322;--ff-head:'Sora',system-ui,sans-serif;--ff-body:'Inter',system-ui,sans-serif;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:20px;--nav-w:220px;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:var(--ff-body);font-size:14px;line-height:1.6;background:var(--ground);color:var(--txt-1);-webkit-font-smoothing:antialiased;}
+a{color:var(--blue-hi);text-decoration:none;}
+button,input,select{font-family:inherit;}
+[hidden]{display:none!important;}
+
+/* ── layout ── */
+.shell{display:flex;min-height:100%;}
+.sidebar{width:var(--nav-w);flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;}
+.sidebar__brand{padding:20px 16px 16px;border-bottom:1px solid var(--border);}
+.brand-mark{display:flex;align-items:center;gap:10px;}
+.brand-icon{width:32px;height:32px;background:var(--blue);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.brand-icon svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.brand-name{font-family:var(--ff-head);font-size:14px;font-weight:700;color:var(--txt-1);letter-spacing:-0.02em;}
+.brand-sub{font-size:9px;font-weight:600;color:var(--txt-3);text-transform:uppercase;letter-spacing:0.06em;}
+.sidebar__nav{padding:14px 10px;flex:1;}
+.nav-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.10em;color:var(--txt-3);padding:8px 8px 6px;}
+.nav-link{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-md);color:var(--txt-2);font-size:13px;font-weight:500;transition:background .15s,color .15s;margin-bottom:2px;}
+.nav-link svg{width:15px;height:15px;flex-shrink:0;}
+.nav-link:hover{background:var(--lift);color:var(--txt-1);}
+.nav-link.active{background:var(--blue-dim);color:var(--blue-hi);border:1px solid var(--blue-glow);}
+.sidebar__user{padding:12px 10px;border-top:1px solid var(--border);}
+.user-row{display:flex;align-items:center;gap:10px;}
+.user-avatar{width:30px;height:30px;background:var(--amber-dim);border:1px solid var(--amber-bdr);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:700;font-size:11px;color:var(--amber);flex-shrink:0;}
+.user-info{flex:1;min-width:0;}
+.user-name{font-size:12px;font-weight:600;color:var(--txt-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-role{font-size:9px;color:var(--txt-3);text-transform:uppercase;letter-spacing:.05em;}
+.logout-btn{background:none;border:none;cursor:pointer;color:var(--txt-3);padding:4px;border-radius:6px;transition:color .15s,background .15s;display:flex;}
+.logout-btn:hover{color:var(--red);background:var(--red-dim);}
+.logout-btn svg{width:14px;height:14px;}
+.main-content{margin-left:var(--nav-w);flex:1;min-width:0;padding:24px 28px;max-width:calc(100% - var(--nav-w));}
+
+/* ── cards / badges / table (mesmos padrões do base.html) ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:18px;}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+.stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden;}
+.stat-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent-bar,var(--blue));border-radius:var(--r-sm) var(--r-sm) 0 0;}
+.stat-tile--urgent{--accent-bar:var(--amber);}
+.stat-tile--ok{--accent-bar:var(--emerald);}
+.stat-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);margin-bottom:4px;}
+.stat-value{font-family:var(--ff-head);font-size:20px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.stat-sub{font-size:11px;color:var(--txt-3);margin-top:3px;}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.8;}
+.badge-pendente{background:var(--amber-dim);color:#D97706;border:1px solid var(--amber-bdr);}
+.badge-em-lote{background:var(--blue-dim);color:var(--blue-hi);border:1px solid var(--blue-glow);}
+.badge-pago{background:var(--emerald-dim);color:var(--emerald);border:1px solid var(--emerald-bdr);}
+.badge-urgente{background:var(--red-dim);color:var(--red);border:1px solid var(--red-bdr);}
+.badge-vencido{background:var(--red-dim);color:var(--red);border:1px solid var(--red-bdr);animation:pulse-badge 1.2s ease-in-out infinite;}
+@keyframes pulse-badge{0%,100%{opacity:1;}50%{opacity:.5;}}
+.badge-vence-hoje{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-bdr);}
+.badge-no-prazo{background:var(--emerald-dim);color:var(--emerald);border:1px solid var(--emerald-bdr);}
+.table-wrap{overflow-x:auto;}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table thead th{padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);border-bottom:1px solid var(--border);white-space:nowrap;}
+.data-table tbody tr{border-bottom:1px solid var(--border);transition:background .12s;}
+.data-table tbody tr:last-child{border-bottom:none;}
+.data-table tbody tr:hover{background:var(--lift);}
+.data-table td{padding:10px 12px;vertical-align:middle;color:var(--txt-1);font-variant-numeric:tabular-nums;}
+.td-value{font-family:var(--ff-head);font-weight:700;font-size:14px;letter-spacing:-.02em;}
+.td-date{white-space:nowrap;color:var(--txt-2);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 12px;border-radius:var(--r-md);font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s,transform .1s,background .15s;white-space:nowrap;text-decoration:none;}
+.btn:active{transform:scale(.97);}
+.btn-ghost{background:var(--lift);color:var(--txt-2);border:1px solid var(--border-hi);}
+.btn-ghost:hover{color:var(--txt-1);background:var(--border);}
+.btn-sm{padding:4px 9px;font-size:11px;}
+.btn svg{width:13px;height:13px;}
+.form-control{background:var(--void);border:1px solid var(--border-hi);border-radius:var(--r-md);color:var(--txt-1);padding:8px 11px;font-size:13px;width:100%;outline:none;}
+.form-control:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow);}
+.form-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.page-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--txt-3);margin-bottom:3px;}
+.page-title{font-family:var(--ff-head);font-size:20px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;}
+.section-title{font-family:var(--ff-head);font-size:14px;font-weight:700;color:var(--txt-1);letter-spacing:-.02em;}
+.alert{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:var(--r-md);font-size:13px;font-weight:500;margin-bottom:14px;}
+.alert-danger{background:var(--red-dim);border:1px solid var(--red-bdr);color:#FDA4A4;}
+.divider{border:none;border-top:1px solid var(--border);margin:16px 0;}
+.mobile-topbar{display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+
+/* copiar código */
+.copy-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;background:var(--blue-dim);color:var(--blue-hi);border:1px solid var(--blue-glow);transition:background .15s;}
+.copy-btn:hover{background:var(--blue);color:#fff;}
+.copy-ok{color:var(--emerald);font-size:10px;font-weight:600;display:none;}
+
+/* toast */
+#toast-container{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:var(--r-md);font-size:13px;font-weight:600;color:#fff;background:#1a2a1a;border:1px solid var(--emerald-bdr);box-shadow:0 8px 32px rgba(0,0,0,.4);opacity:0;transform:translateY(12px);transition:opacity .25s,transform .25s;pointer-events:auto;min-width:200px;max-width:340px;}
+.toast.toast--visible{opacity:1;transform:translateY(0);}
+.toast-icon{width:15px;height:15px;flex-shrink:0;color:var(--emerald);}
+
+@media(max-width:768px){
+  .sidebar{display:none;}
+  .main-content{margin-left:0;max-width:100%;padding:12px;}
+  .mobile-topbar{display:flex;}
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .data-table thead th:nth-child(n+5),.data-table tbody td:nth-child(n+5){display:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar__brand">
+      <div class="brand-mark">
+        <div class="brand-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+        <div>
+          <div class="brand-name">FluxoPay</div>
+          <div class="brand-sub">Visão do Dono</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar__nav">
+      <div class="nav-section-label">Painel</div>
+      <a href="/dono" class="nav-link active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+    </div>
+    <div class="sidebar__user">
+      <div class="user-row">
+        <div class="user-avatar">P</div>
+        <div class="user-info">
+          <div class="user-name">Pedro</div>
+          <div class="user-role">Dono</div>
+        </div>
+        <a href="/logout" class="logout-btn" title="Sair">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="mobile-topbar">
+    <div class="brand-mark">
+      <div class="brand-icon" style="width:26px;height:26px;">
+        <svg viewBox="0 0 24 24" style="width:13px;height:13px;" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <span style="font-family:var(--ff-head);font-weight:700;font-size:13px;">FluxoPay · Pedro</span>
+    </div>
+    <a href="/logout" class="btn btn-ghost btn-sm">Sair</a>
+  </div>
+
+  <main class="main-content">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div class="page-eyebrow">Visão Consolidada</div>
+        <div class="page-title">Dashboard do Dono</div>
+      </div>
+      <a href="/financeiro/exportar{% if filtro_est or filtro_status or filtro_inicio or filtro_fim %}?{% if filtro_est %}estabelecimento_id={{ filtro_est }}&{% endif %}{% if filtro_status %}status={{ filtro_status }}&{% endif %}{% if filtro_inicio %}data_inicio={{ filtro_inicio }}&{% endif %}{% if filtro_fim %}data_fim={{ filtro_fim }}{% endif %}{% endif %}" class="btn btn-ghost btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar CSV
+      </a>
+    </div>
+
+    <!-- FILTROS -->
+    <form method="get" action="/dono" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;align-items:flex-end;">
+      <div class="form-group" style="min-width:140px;flex:1;">
+        <label class="form-label">Loja</label>
+        <select class="form-control" name="estabelecimento_id">
+          <option value="">Todas</option>
+          {% for est in estabelecimentos %}
+          <option value="{{ est.id }}" {% if filtro_est == est.id|string %}selected{% endif %}>{{ est.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:120px;">
+        <label class="form-label">Status</label>
+        <select class="form-control" name="status">
+          <option value="">Todos</option>
+          {% for s in statuses %}
+          <option value="{{ s }}" {% if filtro_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="min-width:120px;">
+        <label class="form-label">De</label>
+        <input class="form-control" type="date" name="data_inicio" value="{{ filtro_inicio }}">
+      </div>
+      <div class="form-group" style="min-width:120px;">
+        <label class="form-label">Até</label>
+        <input class="form-control" type="date" name="data_fim" value="{{ filtro_fim }}">
+      </div>
+      <button type="submit" class="btn btn-ghost">Filtrar</button>
+      <a href="/dono" class="btn btn-ghost" style="opacity:.6;">Limpar</a>
+    </form>
+
+    <!-- CARDS RESUMO -->
+    <div class="stats-row">
+      <div class="stat-tile stat-tile--urgent">
+        <div class="stat-label">Pendente Geral</div>
+        <div class="stat-value" style="font-size:16px;">{{ stats.total_pendente | currency }}</div>
+        <div class="stat-sub">{{ stats.qtd_pendente }} boleto{{ 's' if stats.qtd_pendente != 1 }}</div>
+      </div>
+      <div class="stat-tile" style="--accent-bar:var(--red);">
+        <div class="stat-label">Vence Hoje</div>
+        <div class="stat-value">{{ stats.qtd_hoje }}</div>
+        <div class="stat-sub">{{ stats.total_hoje | currency }}</div>
+      </div>
+      <div class="stat-tile stat-tile--ok">
+        <div class="stat-label">Pago no Mês</div>
+        <div class="stat-value" style="font-size:16px;">{{ stats.total_pago_mes | currency }}</div>
+        <div class="stat-sub">{{ stats.qtd_pago_mes }} boleto{{ 's' if stats.qtd_pago_mes != 1 }}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Total (filtro)</div>
+        <div class="stat-value" style="font-size:16px;">{{ stats.total_filtro | currency }}</div>
+        <div class="stat-sub">{{ boletos | length }} boleto{{ 's' if boletos | length != 1 }}</div>
+      </div>
+    </div>
+
+    <!-- TABELA -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div class="section-title">Boletos</div>
+        <span class="badge badge-em-lote" style="font-size:9px;">{{ boletos | length }} resultado{{ 's' if boletos | length != 1 }}</span>
+      </div>
+      {% if boletos %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Loja</th>
+              <th>Arquivo / Fornecedor</th>
+              <th>Valor</th>
+              <th>Vencimento</th>
+              <th>Status</th>
+              <th>Código de Barras</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in boletos %}
+            {% set hoje_str = hoje %}
+            {% set venc = b.data_vencimento %}
+            {% set sc = b.status.lower().replace(' ','-') %}
+            {% if b.status != 'Pago' %}
+              {% if venc < hoje_str %}
+                {% set venc_badge = 'vencido' %}
+                {% set venc_label = 'Vencido' %}
+              {% elif venc == hoje_str %}
+                {% set venc_badge = 'vence-hoje' %}
+                {% set venc_label = 'Hoje' %}
+              {% else %}
+                {% set venc_badge = 'no-prazo' %}
+                {% set venc_label = '' %}
+              {% endif %}
+            {% else %}
+              {% set venc_badge = '' %}
+              {% set venc_label = '' %}
+            {% endif %}
+            <tr>
+              <td style="font-weight:600;white-space:nowrap;">{{ b.estabelecimento }}</td>
+              <td style="font-size:12px;color:var(--txt-2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                {{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or 'Arquivo' }}
+              </td>
+              <td class="td-value">{{ b.valor | currency }}</td>
+              <td class="td-date">
+                {{ b.data_vencimento | date_br }}
+                {% if venc_badge %}
+                <span class="badge badge-{{ venc_badge }}" style="font-size:9px;margin-left:4px;">{{ venc_label }}</span>
+                {% endif %}
+              </td>
+              <td><span class="badge badge-{{ sc }}">{{ b.status }}</span></td>
+              <td style="min-width:140px;">
+                {% if b.linha_digitavel %}
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <span style="font-size:10px;color:var(--txt-2);font-family:monospace;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b.linha_digitavel }}">{{ b.linha_digitavel[:30] }}{% if b.linha_digitavel | length > 30 %}…{% endif %}</span>
+                  <button class="copy-btn" onclick="copiarCodigo(this, '{{ b.linha_digitavel | replace("'", "\\'") }}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copiar
+                  </button>
+                  <span class="copy-ok">✓ Copiado!</span>
+                </div>
+                {% else %}
+                <span style="font-size:11px;color:var(--txt-3);">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if b.arquivo_url %}
+                <a href="{{ b.arquivo_url }}" target="_blank" class="btn btn-ghost btn-sm">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  PDF
+                </a>
+                {% else %}
+                <span style="font-size:11px;color:var(--txt-3);">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:40px 20px;color:var(--txt-3);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;margin:0 auto 12px;opacity:.4;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div style="font-size:14px;font-weight:500;">Nenhum boleto encontrado</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+function copiarCodigo(btn, codigo) {
+  navigator.clipboard.writeText(codigo).then(function() {
+    var row = btn.parentElement;
+    var ok = row.querySelector('.copy-ok');
+    btn.style.display = 'none';
+    ok.style.display = 'inline';
+    setTimeout(function() {
+      btn.style.display = '';
+      ok.style.display = 'none';
+    }, 2000);
+  }).catch(function() {
+    prompt('Copie o código:', codigo);
+  });
+}
+
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  var msg = params.get('msg');
+  if (!msg) return;
+  var container = document.getElementById('toast-container');
+  var el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' + document.createTextNode(msg).textContent;
+  container.appendChild(el);
+  requestAnimationFrame(function(){ el.classList.add('toast--visible'); });
+  setTimeout(function(){
+    el.style.transition='opacity .4s,transform .4s';
+    el.style.opacity='0';
+    el.style.transform='translateY(12px)';
+    setTimeout(function(){ el.remove(); }, 400);
+  }, 3500);
+  var url = new URL(window.location.href);
+  url.searchParams.delete('msg');
+  history.replaceState(null,'',url.toString());
+})();
+</script>
+</body>
+</html>

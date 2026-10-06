@@ -99,6 +99,25 @@
 
 </div>
 
+<!-- Trocar senha do dono (Pedro) -->
+<div class="card" style="margin-top:20px;max-width:420px;">
+  <div class="section-header" style="margin-bottom:16px;">
+    <div class="section-title">Senha do Dono (Pedro)</div>
+  </div>
+  <form method="post" action="/financeiro/admin/senha-dono" autocomplete="off">
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Nova Senha</label>
+        <input class="form-control" type="password" name="nova_senha" placeholder="Mínimo 4 caracteres" minlength="4" required autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-warn btn-sm" style="align-self:flex-start;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Salvar Nova Senha
+      </button>
+    </div>
+  </form>
+</div>
+
 <style>
 @media (max-width: 860px) {
   div[style*="grid-template-columns:1fr 1fr"] {

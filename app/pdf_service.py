@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,36 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
 from reportlab.pdfgen import canvas as rl_canvas
+
+# Padrões para linha digitável e código de barras
+_RE_LINHA = re.compile(
+    r'\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14}'
+)
+_RE_BARRAS = re.compile(r'(?<!\d)\d{44,48}(?!\d)')
+
+
+def extrair_linha_digitavel(pdf_bytes: bytes) -> str | None:
+    """Tenta extrair a linha digitável ou código de barras de um PDF."""
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        texto = ""
+        for page in reader.pages:
+            texto += (page.extract_text() or "") + "\n"
+            if len(texto) > 8000:
+                break
+
+        m = _RE_LINHA.search(texto)
+        if m:
+            return re.sub(r'\s+', ' ', m.group()).strip()
+
+        # Tenta código de barras numérico sem pontos
+        texto_num = re.sub(r'[^\d\s]', ' ', texto)
+        m2 = _RE_BARRAS.search(texto_num)
+        if m2:
+            return m2.group().strip()
+    except Exception:
+        pass
+    return None
 
 A4_W, A4_H = A4
 

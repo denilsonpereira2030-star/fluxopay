@@ -57,6 +57,13 @@ def _require_financeiro(request: Request) -> dict:
     return user
 
 
+def _require_dono(request: Request) -> dict:
+    user = _require_user(request)
+    if user["perfil"] != "dono":
+        raise HTTPException(status_code=403)
+    return user
+
+
 # ── template context helpers ─────────────────────────────────────────────────
 
 def _tpl(request: Request, template: str, user: dict | None = None, status_code: int = 200, **kwargs):
@@ -128,6 +135,8 @@ async def root(request: Request):
         return RedirectResponse("/login", status_code=303)
     if user["perfil"] == "gerente":
         return RedirectResponse("/gerente", status_code=303)
+    if user["perfil"] == "dono":
+        return RedirectResponse("/dono", status_code=303)
     return RedirectResponse("/financeiro", status_code=303)
 
 
@@ -189,6 +198,9 @@ def gerente_salvar_boleto(
         nome, tipo, dados = pdf_service.processar_upload(conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream")
         del conteudo
 
+        # Tenta extrair linha digitável antes de liberar os dados do PDF
+        linha_digitavel = pdf_service.extrair_linha_digitavel(dados)
+
         if db.supabase:
             caminho = f"{user['estabelecimento_id']}/{uuid.uuid4()}_{nome}"
             try:
@@ -211,7 +223,7 @@ def gerente_salvar_boleto(
         del dados
         gc.collect()
 
-        db.salvar_boleto(user["estabelecimento_id"], nome, arquivo_url, valor, vencimento)
+        db.salvar_boleto(user["estabelecimento_id"], nome, arquivo_url, valor, vencimento, linha_digitavel)
     except Exception as exc:
         print(f"ERRO FATAL NO UPLOAD: {str(exc)}", flush=True)
         return _tpl(
@@ -305,7 +317,9 @@ async def financeiro_historico(
         data_inicio=di,
         data_fim=df,
     )
-    return _tpl(request, "financeiro_historico.html", user=user, boletos=rows, filtro_status=status, filtro_inicio=data_inicio, filtro_fim=data_fim, statuses=db.STATUSES)
+    return _tpl(request, "financeiro_historico.html", user=user, boletos=rows,
+                filtro_status=status, filtro_inicio=data_inicio, filtro_fim=data_fim,
+                statuses=db.STATUSES, hoje=date.today().isoformat())
 
 
 @app.post("/financeiro/boleto/{boleto_id}/status")
@@ -315,7 +329,9 @@ async def financeiro_status(boleto_id: int, request: Request, status: str = Form
         raise HTTPException(403)
     if status not in db.STATUSES:
         raise HTTPException(400)
-    db.atualizar_boleto(boleto_id, status=status)
+    pago_em = datetime.now().isoformat(timespec="seconds") if status == "Pago" else None
+    pago_por = user["login"] if status == "Pago" else None
+    db.atualizar_boleto(boleto_id, status=status, pago_em=pago_em, pago_por=pago_por)
     redirect = origem if origem in ("/financeiro", "/financeiro/lote", "/financeiro/historico") else "/financeiro"
     sep = "&" if "?" in redirect else "?"
     return RedirectResponse(f"{redirect}{sep}msg=Status+atualizado+com+sucesso%21", status_code=303)
@@ -461,6 +477,82 @@ async def financeiro_boletos(
     )
 
 
+@app.get("/financeiro/exportar")
+async def financeiro_exportar(
+    request: Request,
+    estabelecimento_id: str = "",
+    status: str = "",
+    data_inicio: str = "",
+    data_fim: str = "",
+):
+    user = _get_user(request)
+    if not user or user["perfil"] not in ("financeiro", "dono"):
+        raise HTTPException(403)
+    est_id = int(estabelecimento_id) if estabelecimento_id.isdigit() else None
+    di = date.fromisoformat(data_inicio) if data_inicio else None
+    df = date.fromisoformat(data_fim) if data_fim else None
+    csv_content = db.exportar_boletos_csv(
+        estabelecimento_id=est_id,
+        status=status if status and status != "Todos" else None,
+        data_inicio=di,
+        data_fim=df,
+    )
+    filename = f"boletos_{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8-sig")),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# ── DONO VIEWS ────────────────────────────────────────────────────────────────
+
+@app.get("/dono", response_class=HTMLResponse)
+async def dono_dashboard(
+    request: Request,
+    estabelecimento_id: str = "",
+    status: str = "",
+    data_inicio: str = "",
+    data_fim: str = "",
+):
+    _require_dono(request)
+    est_id = int(estabelecimento_id) if estabelecimento_id.isdigit() else None
+    di = date.fromisoformat(data_inicio) if data_inicio else None
+    df = date.fromisoformat(data_fim) if data_fim else None
+    boletos = db.listar_boletos(
+        estabelecimento_id=est_id,
+        status=status if status and status != "Todos" else None,
+        data_inicio=di,
+        data_fim=df,
+    )
+    hoje = date.today()
+    mes_inicio = date(hoje.year, hoje.month, 1)
+    todos_pendentes = db.listar_boletos(status="Pendente")
+    urgentes = db.listar_boletos(data_inicio=hoje, data_fim=hoje)
+    pagos_mes = db.listar_boletos(status="Pago", data_inicio=mes_inicio)
+    stats = {
+        "total_pendente": sum(float(r["valor"]) for r in todos_pendentes),
+        "qtd_pendente": len(todos_pendentes),
+        "qtd_hoje": len(urgentes),
+        "total_hoje": sum(float(r["valor"]) for r in urgentes),
+        "total_pago_mes": sum(float(r["valor"]) for r in pagos_mes),
+        "qtd_pago_mes": len(pagos_mes),
+        "total_filtro": sum(float(r["valor"]) for r in boletos),
+    }
+    return _tpl(
+        request, "dono_dashboard.html", user=None,
+        boletos=boletos,
+        estabelecimentos=db.listar_estabelecimentos(),
+        statuses=db.STATUSES,
+        stats=stats,
+        filtro_est=estabelecimento_id,
+        filtro_status=status,
+        filtro_inicio=data_inicio,
+        filtro_fim=data_fim,
+        hoje=hoje.isoformat(),
+    )
+
+
 @app.get("/financeiro/admin", response_class=HTMLResponse)
 async def financeiro_admin(request: Request, error: str = ""):
     user = _require_financeiro(request)
@@ -510,6 +602,40 @@ async def financeiro_admin_criar_gerente(
         f"/financeiro/admin?msg=Gerente+%22{login}%22+cadastrado+com+sucesso%21",
         status_code=303,
     )
+
+
+@app.post("/financeiro/admin/senha-dono")
+async def financeiro_admin_senha_dono(
+    request: Request,
+    nova_senha: str = Form(...),
+):
+    _require_financeiro(request)
+    if len(nova_senha) < 4:
+        return RedirectResponse(
+            "/financeiro/admin?error=Senha+deve+ter+no+m%C3%ADnimo+4+caracteres.",
+            status_code=303,
+        )
+    db.trocar_senha_usuario("pedro", nova_senha)
+    return RedirectResponse(
+        "/financeiro/admin?msg=Senha+do+dono+atualizada+com+sucesso%21",
+        status_code=303,
+    )
+
+
+@app.post("/financeiro/boleto/{boleto_id}/linha-digitavel")
+async def financeiro_salvar_linha(
+    boleto_id: int,
+    request: Request,
+    linha_digitavel: str = Form(""),
+    origem: str = Form(""),
+):
+    user = _get_user(request)
+    if not user or user["perfil"] != "financeiro":
+        raise HTTPException(403)
+    db.atualizar_boleto(boleto_id, linha_digitavel=linha_digitavel.strip() or None)
+    redirect = origem if origem in ("/financeiro", "/financeiro/lote", "/financeiro/historico", "/financeiro/boletos") else "/financeiro/historico"
+    sep = "&" if "?" in redirect else "?"
+    return RedirectResponse(f"{redirect}{sep}msg=C%C3%B3digo+salvo+com+sucesso%21", status_code=303)
 
 
 @app.get("/gerente/boletos", response_class=HTMLResponse)

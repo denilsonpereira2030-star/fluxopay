@@ -174,11 +174,11 @@ def _init_db_inner() -> None:
     if _USE_PG:
         serial = "SERIAL"
         blob = "BYTEA"
-        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro'))"
+        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro', 'dono'))"
     else:
         serial = "INTEGER PRIMARY KEY AUTOINCREMENT"
         blob = "BLOB"
-        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro'))"
+        pk_check = "perfil TEXT NOT NULL CHECK(perfil IN ('gerente', 'financeiro', 'dono'))"
 
     cur.execute(f"""
         CREATE TABLE IF NOT EXISTS estabelecimentos (
@@ -218,10 +218,20 @@ def _init_db_inner() -> None:
             (2, "gerente2", "senha123", "gerente"),
             (3, "gerente3", "senha123", "gerente"),
             (None, "financeiro", "admin123", "financeiro"),
+            (None, "pedro", "pedro123", "dono"),
         ]:
             cur.execute(
                 f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
                 row,
+            )
+    else:
+        # Garante que o usuário pedro/dono exista — idempotente
+        ph1 = "%s" if _USE_PG else "?"
+        cur.execute(f"SELECT id FROM usuarios WHERE login={ph1}", ("pedro",))
+        if not cur.fetchone():
+            cur.execute(
+                f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
+                (None, "pedro", "pedro123", "dono"),
             )
 
     cur.execute(f"""
@@ -243,10 +253,26 @@ def _init_db_inner() -> None:
             ("arquivo_nome", "TEXT"),
             ("arquivo_url", "TEXT"),
             ("status", "TEXT DEFAULT 'Pendente'"),
+            ("linha_digitavel", "TEXT"),
+            ("pago_em", "TEXT"),
+            ("pago_por", "TEXT"),
         ]:
             cur.execute(
                 f"ALTER TABLE boletos ADD COLUMN IF NOT EXISTS {col} {definition}"
             )
+        # Expande CHECK de perfil se necessário (PG não permite ALTER CHECK inline — usa ALTER)
+        cur.execute("""
+            SELECT conname FROM pg_constraint
+            WHERE conrelid='usuarios'::regclass AND contype='c' AND conname LIKE '%perfil%'
+        """)
+        constraint = cur.fetchone()
+        if constraint:
+            cname = constraint[0] if isinstance(constraint, tuple) else constraint["conname"]
+            cur.execute(f"ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS {cname}")
+        cur.execute("""
+            ALTER TABLE usuarios ADD CONSTRAINT IF NOT EXISTS usuarios_perfil_check
+            CHECK(perfil IN ('gerente','financeiro','dono'))
+        """)
         # remove coluna BLOB se ainda existir (migração de versão anterior)
         cur.execute("""
             SELECT column_name FROM information_schema.columns
@@ -261,6 +287,9 @@ def _init_db_inner() -> None:
             ("arquivo_nome", "TEXT"),
             ("arquivo_url", "TEXT"),
             ("status", "TEXT DEFAULT 'Pendente'"),
+            ("linha_digitavel", "TEXT"),
+            ("pago_em", "TEXT"),
+            ("pago_por", "TEXT"),
         ]:
             if col not in cols:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
@@ -377,7 +406,8 @@ def listar_boletos(
     query = """
         SELECT b.id, b.estabelecimento_id, e.nome AS estabelecimento,
                b.arquivo_nome, b.arquivo_url,
-               b.valor, b.data_vencimento, b.data_envio, b.status
+               b.valor, b.data_vencimento, b.data_envio, b.status,
+               b.linha_digitavel, b.pago_em, b.pago_por
         FROM boletos b
         INNER JOIN estabelecimentos e ON e.id = b.estabelecimento_id
     """
@@ -475,6 +505,7 @@ def salvar_boleto(
     arquivo_url: str,
     valor: float,
     data_vencimento: date,
+    linha_digitavel: str | None = None,
 ) -> int:
     conn = get_connection()
     try:
@@ -482,11 +513,12 @@ def salvar_boleto(
         cur.execute(
             f"""INSERT INTO boletos
                 (estabelecimento_id, arquivo_nome, arquivo_url,
-                 valor, data_vencimento, data_envio, status)
-                VALUES ({_ph(7)})""",
+                 valor, data_vencimento, data_envio, status, linha_digitavel)
+                VALUES ({_ph(8)})""",
             (
                 estabelecimento_id, arquivo_nome, arquivo_url,
-                valor, data_vencimento.isoformat(), date.today().isoformat(), "Pendente",
+                valor, data_vencimento.isoformat(), date.today().isoformat(),
+                "Pendente", linha_digitavel,
             ),
         )
         if _USE_PG:
@@ -501,7 +533,15 @@ def salvar_boleto(
         raise
 
 
-def atualizar_boleto(boleto_id: int, valor: float | None = None, data_vencimento: date | None = None, status: str | None = None) -> None:
+def atualizar_boleto(
+    boleto_id: int,
+    valor: float | None = None,
+    data_vencimento: date | None = None,
+    status: str | None = None,
+    linha_digitavel: str | None = None,
+    pago_em: str | None = None,
+    pago_por: str | None = None,
+) -> None:
     ph = "%s" if _USE_PG else "?"
     campos, params = [], []
     if valor is not None:
@@ -513,6 +553,15 @@ def atualizar_boleto(boleto_id: int, valor: float | None = None, data_vencimento
     if status is not None:
         campos.append(f"status = {ph}")
         params.append(status)
+    if linha_digitavel is not None:
+        campos.append(f"linha_digitavel = {ph}")
+        params.append(linha_digitavel)
+    if pago_em is not None:
+        campos.append(f"pago_em = {ph}")
+        params.append(pago_em)
+    if pago_por is not None:
+        campos.append(f"pago_por = {ph}")
+        params.append(pago_por)
     if not campos:
         return
     params.append(boleto_id)
@@ -551,6 +600,7 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
     cur.execute(
         f"""SELECT b.id, b.estabelecimento_id, b.arquivo_nome, b.arquivo_url,
                    b.valor, b.data_vencimento, b.data_envio, b.status,
+                   b.linha_digitavel, b.pago_em, b.pago_por,
                    e.nome AS estabelecimento
             FROM boletos b JOIN estabelecimentos e ON e.id=b.estabelecimento_id
             WHERE b.id={ph}""",
@@ -559,6 +609,48 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
     row = _fetchone(cur)
     _release(conn)
     return row
+
+
+def trocar_senha_usuario(login: str, nova_senha: str) -> bool:
+    import hashlib
+    senha_hash = hashlib.sha256(nova_senha.encode()).hexdigest()
+    ph = "%s" if _USE_PG else "?"
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE usuarios SET senha={ph} WHERE login={ph}", (senha_hash, login))
+    affected = cur.rowcount
+    _commit_close(conn)
+    return affected > 0
+
+
+def exportar_boletos_csv(
+    estabelecimento_id: int | None = None,
+    status: str | None = None,
+    data_inicio: date | None = None,
+    data_fim: date | None = None,
+) -> str:
+    import csv, io as _io
+    rows = listar_boletos(
+        estabelecimento_id=estabelecimento_id,
+        status=status,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Loja", "Arquivo", "Valor", "Vencimento", "Status", "Pago Em", "Pago Por", "Linha Digitável"])
+    for r in rows:
+        writer.writerow([
+            r.get("estabelecimento", ""),
+            r.get("arquivo_nome", ""),
+            f"{float(r['valor']):.2f}",
+            r.get("data_vencimento", ""),
+            r.get("status", ""),
+            r.get("pago_em", "") or "",
+            r.get("pago_por", "") or "",
+            r.get("linha_digitavel", "") or "",
+        ])
+    return buf.getvalue()
 
 
 def get_dashboard_stats() -> dict:

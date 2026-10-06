@@ -58,19 +58,47 @@
           <th>Vencimento</th>
           <th>Enviado em</th>
           <th>Status</th>
+          <th>Código</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for b in boletos %}
+        {% set hoje_str = hoje %}
+        {% set venc = b.data_vencimento %}
+        {% set sc = b.status.lower().replace(' ','-') %}
+        {% if b.status != 'Pago' %}
+          {% if venc < hoje_str %}{% set venc_cls = 'vencido' %}{% set venc_lbl = 'Vencido' %}
+          {% elif venc == hoje_str %}{% set venc_cls = 'vence-hoje' %}{% set venc_lbl = 'Hoje' %}
+          {% else %}{% set venc_cls = 'no-prazo' %}{% set venc_lbl = '' %}{% endif %}
+        {% else %}{% set venc_cls = '' %}{% set venc_lbl = '' %}{% endif %}
         <tr id="row-{{ b.id }}">
           <td style="font-weight:600;">{{ b.estabelecimento }}</td>
           <td class="td-value">{{ b.valor | currency }}</td>
-          <td class="td-date">{{ b.data_vencimento | date_br }}</td>
+          <td class="td-date">
+            {{ b.data_vencimento | date_br }}
+            {% if venc_cls %}
+            <span class="badge badge-{{ venc_cls }}" style="font-size:9px;margin-left:4px;">{{ venc_lbl }}</span>
+            {% endif %}
+          </td>
           <td class="td-date" style="color:var(--txt-3);">{{ b.data_envio | date_br }}</td>
           <td>
-            {% set sc = b.status.lower().replace(' ','-') %}
             <span class="badge badge-{{ sc }}">{{ b.status }}</span>
+            {% if b.pago_por %}<div style="font-size:9px;color:var(--txt-3);margin-top:2px;">por {{ b.pago_por }}</div>{% endif %}
+          </td>
+          <td style="min-width:120px;">
+            {% if b.linha_digitavel %}
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <span style="font-size:10px;color:var(--txt-2);font-family:monospace;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b.linha_digitavel }}">{{ b.linha_digitavel[:20] }}{% if b.linha_digitavel|length > 20 %}…{% endif %}</span>
+              <button class="copy-btn" onclick="copiarCodigo(this,'{{ b.linha_digitavel|replace("'","\\'") }}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copy-ok">✓</span>
+            </div>
+            {% else %}
+            <span style="font-size:11px;color:var(--txt-3);">—</span>
+            {% endif %}
           </td>
           <td>
             <div class="action-row">
@@ -117,6 +145,17 @@
                   <button class="btn btn-ghost btn-sm" type="button" onclick="toggleEdit({{ b.id }})">Cancelar</button>
                 </div>
               </form>
+              <!-- Linha digitável manual -->
+              <form method="post" action="/financeiro/boleto/{{ b.id }}/linha-digitavel" style="margin-top:10px;">
+                <input type="hidden" name="origem" value="/financeiro/historico">
+                <div class="form-group">
+                  <label class="form-label">Linha Digitável / Código de Barras</label>
+                  <div style="display:flex;gap:6px;">
+                    <input class="form-control" name="linha_digitavel" type="text" value="{{ b.linha_digitavel or '' }}" placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000">
+                    <button class="btn btn-ghost btn-sm" type="submit" style="white-space:nowrap;">Salvar código</button>
+                  </div>
+                </div>
+              </form>
             </div>
           </td>
         </tr>
@@ -133,10 +172,28 @@
   {% endif %}
 </div>
 
+<style>
+.badge-vencido{background:var(--red-dim);color:var(--red);border:1px solid var(--red-bdr);animation:pulse-badge 1.2s ease-in-out infinite;}
+@keyframes pulse-badge{0%,100%{opacity:1;}50%{opacity:.45;}}
+.badge-vence-hoje{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-bdr);}
+.badge-no-prazo{background:var(--emerald-dim);color:var(--emerald);border:1px solid var(--emerald-bdr);}
+.copy-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;background:var(--blue-dim);color:var(--blue-hi);border:1px solid var(--blue-glow);transition:background .15s;}
+.copy-btn:hover{background:var(--blue);color:#fff;}
+.copy-ok{color:var(--emerald);font-size:10px;font-weight:600;display:none;}
+</style>
 <script>
 function toggleEdit(id) {
   const el = document.getElementById('edit-' + id);
   el.hidden = !el.hidden;
+}
+function copiarCodigo(btn, codigo) {
+  navigator.clipboard.writeText(codigo).then(function() {
+    const row = btn.parentElement;
+    const ok = row.querySelector('.copy-ok');
+    btn.style.display = 'none';
+    ok.style.display = 'inline';
+    setTimeout(function() { btn.style.display = ''; ok.style.display = 'none'; }, 2000);
+  }).catch(function() { prompt('Copie o código:', codigo); });
 }
 </script>
 {% endblock %}
