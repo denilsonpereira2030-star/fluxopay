@@ -225,14 +225,7 @@ def _init_db_inner() -> None:
                 row,
             )
     else:
-        # Garante que o usuário pedro/dono exista — idempotente
-        ph1 = "%s" if _USE_PG else "?"
-        cur.execute(f"SELECT id FROM usuarios WHERE login={ph1}", ("pedro",))
-        if not cur.fetchone():
-            cur.execute(
-                f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
-                (None, "pedro", "pedro123", "dono"),
-            )
+        pass  # pedro é garantido abaixo, após expansão do CHECK constraint
 
     cur.execute(f"""
         CREATE TABLE IF NOT EXISTS boletos (
@@ -294,6 +287,20 @@ def _init_db_inner() -> None:
             if col not in cols:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
         conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
+
+    # Garante usuário pedro/dono depois de expandir o CHECK constraint
+    ph1 = "%s" if _USE_PG else "?"
+    cur.execute(f"SELECT id, perfil FROM usuarios WHERE login={ph1}", ("pedro",))
+    row_pedro = cur.fetchone()
+    if not row_pedro:
+        cur.execute(
+            f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
+            (None, "pedro", "pedro123", "dono"),
+        )
+    else:
+        perfil_atual = row_pedro[1] if isinstance(row_pedro, tuple) else row_pedro["perfil"]
+        if perfil_atual != "dono":
+            cur.execute(f"UPDATE usuarios SET perfil={ph1} WHERE login={ph1}", ("dono", "pedro"))
 
     conn.commit()
     conn.close()

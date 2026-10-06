@@ -109,7 +109,14 @@ async def login_post(
         return _tpl(request, "login.html", error="Usuário ou senha incorretos.", status_code=401)
     token = _make_token()
     _sessions[token] = user
-    response = RedirectResponse("/", status_code=303)
+    perfil = user["perfil"]
+    if perfil == "gerente":
+        dest = "/gerente"
+    elif perfil == "dono":
+        dest = "/dono"
+    else:
+        dest = "/financeiro"
+    response = RedirectResponse(dest, status_code=303)
     # "Manter conectado": 30 dias; sessão normal: 24 horas
     max_age = 2592000 if remember == "1" else 86400
     response.set_cookie("session", token, httponly=True, samesite="lax", max_age=max_age)
