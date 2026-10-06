@@ -629,6 +629,26 @@ async def financeiro_admin_senha_dono(
     )
 
 
+@app.post("/financeiro/admin/criar-dono")
+async def financeiro_admin_criar_dono(
+    request: Request,
+    login: str = Form("pedro"),
+    senha: str = Form(...),
+):
+    _require_financeiro(request)
+    login = (login.strip().lower()) or "pedro"
+    if len(senha) < 4:
+        return RedirectResponse(
+            "/financeiro/admin?error=Senha+deve+ter+no+m%C3%ADnimo+4+caracteres.",
+            status_code=303,
+        )
+    db.upsert_usuario_dono(login, senha)
+    return RedirectResponse(
+        "/financeiro/admin?msg=Conta+do+Dono+%28Pedro%29+salva+com+sucesso%21",
+        status_code=303,
+    )
+
+
 @app.post("/financeiro/boleto/{boleto_id}/linha-digitavel")
 async def financeiro_salvar_linha(
     boleto_id: int,

@@ -99,20 +99,48 @@
 
 </div>
 
-<!-- Trocar senha do dono (Pedro) -->
-<div class="card" style="margin-top:20px;max-width:420px;">
+<!-- Gerenciar conta do dono (Pedro) -->
+<div class="card" style="margin-top:20px;max-width:480px;">
   <div class="section-header" style="margin-bottom:16px;">
-    <div class="section-title">Senha do Dono (Pedro)</div>
+    <div class="section-title">Gerenciar Conta do Dono (Pedro)</div>
+    <span class="badge badge-em-lote" style="font-size:9px;">perfil: dono</span>
+  </div>
+  <p style="font-size:12px;color:var(--txt-3);margin:0 0 16px;">
+    Preencha o login e a senha para criar ou atualizar a conta do dono. Se o login já existir, a senha e o perfil serão atualizados.
+  </p>
+  <form method="post" action="/financeiro/admin/criar-dono" autocomplete="off">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label class="form-label">Login</label>
+        <input class="form-control" type="text" name="login" value="pedro" placeholder="pedro" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Senha</label>
+        <input class="form-control" type="password" name="senha" placeholder="Mínimo 4 caracteres" minlength="4" required autocomplete="new-password">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Criar / Atualizar Conta do Pedro
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <hr class="divider" style="margin:20px 0 16px;">
+
+  <div class="section-header" style="margin-bottom:12px;">
+    <div style="font-size:11px;font-weight:600;color:var(--txt-3);letter-spacing:0.04em;text-transform:uppercase;">Apenas alterar senha</div>
   </div>
   <form method="post" action="/financeiro/admin/senha-dono" autocomplete="off">
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div class="form-group">
-        <label class="form-label">Nova Senha</label>
+    <div style="display:flex;gap:8px;align-items:flex-end;">
+      <div class="form-group" style="flex:1;margin:0;">
+        <label class="form-label">Nova Senha (login fixo: pedro)</label>
         <input class="form-control" type="password" name="nova_senha" placeholder="Mínimo 4 caracteres" minlength="4" required autocomplete="new-password">
       </div>
-      <button type="submit" class="btn btn-warn btn-sm" style="align-self:flex-start;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        Salvar Nova Senha
+      <button type="submit" class="btn btn-warn btn-sm" style="white-space:nowrap;flex-shrink:0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Só atualizar senha
       </button>
     </div>
   </form>

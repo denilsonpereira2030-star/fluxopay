@@ -379,6 +379,32 @@ def listar_usuarios_gerentes() -> list[dict]:
     return rows
 
 
+def upsert_usuario_dono(login: str, senha: str) -> None:
+    """Cria ou atualiza um usuário com perfil 'dono' usando SHA-256."""
+    import hashlib
+    login = login.strip().lower()
+    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT id FROM usuarios WHERE login={_ph()}", (login,))
+        existe = cur.fetchone()
+        if existe:
+            cur.execute(
+                f"UPDATE usuarios SET senha={_ph()}, perfil={_ph()} WHERE login={_ph()}",
+                (senha_hash, "dono", login),
+            )
+        else:
+            cur.execute(
+                f"INSERT INTO usuarios (estabelecimento_id, login, senha, perfil) VALUES ({_ph(4)})",
+                (None, login, senha_hash, "dono"),
+            )
+        _commit_close(conn)
+    except Exception:
+        _release(conn, error=True)
+        raise
+
+
 def criar_estabelecimento(nome: str) -> int:
     conn = get_connection()
     try:
