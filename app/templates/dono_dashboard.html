@@ -8,8 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ── tokens (idênticos ao base.html) ── */
-:root{--void:#080D1A;--ground:#0C1322;--surface:#121C2E;--lift:#1A2640;--border:rgba(99,130,185,0.14);--border-hi:rgba(99,130,185,0.28);--blue:#2563EB;--blue-hi:#3B82F6;--blue-glow:rgba(37,99,235,0.20);--blue-dim:rgba(37,99,235,0.12);--amber:#F59E0B;--amber-dim:rgba(245,158,11,0.12);--amber-bdr:rgba(245,158,11,0.30);--emerald:#10B981;--emerald-dim:rgba(16,185,129,0.10);--emerald-bdr:rgba(16,185,129,0.28);--red:#EF4444;--red-dim:rgba(239,68,68,0.10);--red-bdr:rgba(239,68,68,0.28);--txt-1:#F1F5F9;--txt-2:#94A3B8;--txt-3:#64748B;--txt-inv:#0C1322;--ff-head:'Sora',system-ui,sans-serif;--ff-body:'Inter',system-ui,sans-serif;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:20px;--nav-w:220px;}
+:root{--void:#080D1A;--ground:#0C1322;--surface:#121C2E;--lift:#1A2640;--border:rgba(99,130,185,0.14);--border-hi:rgba(99,130,185,0.28);--blue:#2563EB;--blue-hi:#3B82F6;--blue-glow:rgba(37,99,235,0.20);--blue-dim:rgba(37,99,235,0.12);--amber:#F59E0B;--amber-dim:rgba(245,158,11,0.12);--amber-bdr:rgba(245,158,11,0.30);--emerald:#10B981;--emerald-dim:rgba(16,185,129,0.10);--emerald-bdr:rgba(16,185,129,0.28);--red:#EF4444;--red-dim:rgba(239,68,68,0.10);--red-bdr:rgba(239,68,68,0.28);--txt-1:#F1F5F9;--txt-2:#94A3B8;--txt-3:#64748B;--txt-inv:#0C1322;--ff-head:'Sora',system-ui,sans-serif;--ff-body:'Inter',system-ui,sans-serif;--r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:20px;--nav-w:224px;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{font-family:var(--ff-body);font-size:14px;line-height:1.6;background:var(--ground);color:var(--txt-1);-webkit-font-smoothing:antialiased;}
@@ -42,17 +41,28 @@ button,input,select{font-family:inherit;}
 .logout-btn:hover{color:var(--red);background:var(--red-dim);}
 .logout-btn svg{width:14px;height:14px;}
 .main-content{margin-left:var(--nav-w);flex:1;min-width:0;padding:24px 28px;max-width:calc(100% - var(--nav-w));}
+.mobile-topbar{display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
 
-/* ── cards / badges / table (mesmos padrões do base.html) ── */
+/* ── components ── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:18px;}
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
-.stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden;}
+.section-header{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.section-title{font-family:var(--ff-head);font-size:14px;font-weight:700;color:var(--txt-1);letter-spacing:-.02em;}
+.page-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--txt-3);margin-bottom:3px;}
+.page-title{font-family:var(--ff-head);font-size:22px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;}
+.divider{border:none;border-top:1px solid var(--border);}
+
+/* stat tiles */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;position:relative;overflow:hidden;cursor:default;}
 .stat-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent-bar,var(--blue));border-radius:var(--r-sm) var(--r-sm) 0 0;}
-.stat-tile--urgent{--accent-bar:var(--amber);}
-.stat-tile--ok{--accent-bar:var(--emerald);}
+.stat-tile.clickable{cursor:pointer;transition:border-color .15s,transform .1s;}
+.stat-tile.clickable:hover{border-color:var(--border-hi);transform:translateY(-1px);}
+.stat-tile.active-filter{border-color:var(--accent-bar,var(--blue));box-shadow:0 0 0 1px var(--accent-bar,var(--blue));}
 .stat-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);margin-bottom:4px;}
-.stat-value{font-family:var(--ff-head);font-size:20px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.stat-value{font-family:var(--ff-head);font-size:19px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
 .stat-sub{font-size:11px;color:var(--txt-3);margin-top:3px;}
+
+/* badges */
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;}
 .badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.8;}
 .badge-pendente{background:var(--amber-dim);color:#D97706;border:1px solid var(--amber-bdr);}
@@ -63,37 +73,72 @@ button,input,select{font-family:inherit;}
 @keyframes pulse-badge{0%,100%{opacity:1;}50%{opacity:.5;}}
 .badge-vence-hoje{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-bdr);}
 .badge-no-prazo{background:var(--emerald-dim);color:var(--emerald);border:1px solid var(--emerald-bdr);}
+
+/* table */
 .table-wrap{overflow-x:auto;}
 table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 .data-table thead th{padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);border-bottom:1px solid var(--border);white-space:nowrap;}
-.data-table tbody tr{border-bottom:1px solid var(--border);transition:background .12s;}
+.data-table tbody tr{border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer;}
 .data-table tbody tr:last-child{border-bottom:none;}
 .data-table tbody tr:hover{background:var(--lift);}
 .data-table td{padding:10px 12px;vertical-align:middle;color:var(--txt-1);font-variant-numeric:tabular-nums;}
 .td-value{font-family:var(--ff-head);font-weight:700;font-size:14px;letter-spacing:-.02em;}
 .td-date{white-space:nowrap;color:var(--txt-2);}
+
+/* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 12px;border-radius:var(--r-md);font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s,transform .1s,background .15s;white-space:nowrap;text-decoration:none;}
 .btn:active{transform:scale(.97);}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{opacity:.88;}
 .btn-ghost{background:var(--lift);color:var(--txt-2);border:1px solid var(--border-hi);}
 .btn-ghost:hover{color:var(--txt-1);background:var(--border);}
 .btn-sm{padding:4px 9px;font-size:11px;}
 .btn svg{width:13px;height:13px;}
-.form-control{background:var(--void);border:1px solid var(--border-hi);border-radius:var(--r-md);color:var(--txt-1);padding:8px 11px;font-size:13px;width:100%;outline:none;}
-.form-control:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow);}
-.form-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);}
-.form-group{display:flex;flex-direction:column;gap:5px;}
-.page-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.10em;color:var(--txt-3);margin-bottom:3px;}
-.page-title{font-family:var(--ff-head);font-size:20px;font-weight:800;color:var(--txt-1);letter-spacing:-.03em;}
-.section-title{font-family:var(--ff-head);font-size:14px;font-weight:700;color:var(--txt-1);letter-spacing:-.02em;}
-.alert{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:var(--r-md);font-size:13px;font-weight:500;margin-bottom:14px;}
-.alert-danger{background:var(--red-dim);border:1px solid var(--red-bdr);color:#FDA4A4;}
-.divider{border:none;border-top:1px solid var(--border);margin:16px 0;}
-.mobile-topbar{display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:8px 12px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
-
-/* copiar código */
 .copy-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;background:var(--blue-dim);color:var(--blue-hi);border:1px solid var(--blue-glow);transition:background .15s;}
 .copy-btn:hover{background:var(--blue);color:#fff;}
 .copy-ok{color:var(--emerald);font-size:10px;font-weight:600;display:none;}
+
+/* forms */
+.form-control{background:var(--void);border:1px solid var(--border-hi);border-radius:var(--r-md);color:var(--txt-1);padding:7px 10px;font-size:13px;width:100%;outline:none;}
+.form-control:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow);}
+.form-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+
+/* lote semanal */
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
+.day-card{background:var(--lift);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;}
+.day-card:hover{border-color:var(--border-hi);background:var(--surface);}
+.day-card.today{border-color:var(--blue-glow);background:var(--blue-dim);}
+.day-card.has-boletos{border-color:var(--amber-bdr);}
+.day-card.today.has-boletos{border-color:var(--blue-hi);}
+.day-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);margin-bottom:4px;}
+.day-card.today .day-name{color:var(--blue-hi);}
+.day-total{font-family:var(--ff-head);font-size:12px;font-weight:700;color:var(--txt-1);}
+.day-qtd{font-size:10px;color:var(--txt-3);margin-top:2px;}
+
+/* resumo lojas */
+.lojas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+.loja-card{background:var(--lift);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;cursor:pointer;transition:border-color .15s;}
+.loja-card:hover{border-color:var(--border-hi);}
+.loja-card.active-loja{border-color:var(--blue-hi);background:var(--blue-dim);}
+.loja-name{font-size:12px;font-weight:700;color:var(--txt-1);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.loja-valor{font-family:var(--ff-head);font-size:15px;font-weight:800;color:var(--amber);letter-spacing:-.02em;}
+.loja-qtd{font-size:10px;color:var(--txt-3);margin-top:2px;}
+
+/* modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(8,13,26,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);}
+.modal-box{background:var(--surface);border:1px solid var(--border-hi);border-radius:var(--r-xl);width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;}
+.modal-close{position:absolute;top:14px;right:14px;background:none;border:none;cursor:pointer;color:var(--txt-3);padding:4px;border-radius:6px;display:flex;}
+.modal-close:hover{color:var(--txt-1);background:var(--lift);}
+.modal-close svg{width:18px;height:18px;}
+.modal-title{font-family:var(--ff-head);font-size:16px;font-weight:700;color:var(--txt-1);margin-bottom:18px;padding-right:28px;}
+.detail-row{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;}
+.detail-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);min-width:110px;padding-top:1px;}
+.detail-val{font-size:13px;color:var(--txt-1);flex:1;}
+.barcode-box{background:var(--void);border:1px solid var(--border-hi);border-radius:var(--r-md);padding:12px 14px;margin:14px 0;font-family:monospace;font-size:12px;color:var(--txt-2);word-break:break-all;line-height:1.7;}
+.btn-copy-big{width:100%;padding:10px;font-size:13px;font-weight:700;background:var(--blue);color:#fff;border:none;border-radius:var(--r-md);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s;}
+.btn-copy-big:hover{opacity:.88;}
+.btn-copy-big svg{width:15px;height:15px;}
 
 /* toast */
 #toast-container{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;}
@@ -101,17 +146,29 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 .toast.toast--visible{opacity:1;transform:translateY(0);}
 .toast-icon{width:15px;height:15px;flex-shrink:0;color:var(--emerald);}
 
+/* responsive */
+@media(max-width:900px){
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .week-grid{grid-template-columns:repeat(4,1fr);}
+}
 @media(max-width:768px){
   .sidebar{display:none;}
   .main-content{margin-left:0;max-width:100%;padding:12px;}
   .mobile-topbar{display:flex;}
   .stats-row{grid-template-columns:1fr 1fr;}
+  .week-grid{grid-template-columns:repeat(4,1fr);}
   .data-table thead th:nth-child(n+5),.data-table tbody td:nth-child(n+5){display:none;}
+}
+@media(max-width:480px){
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .week-grid{grid-template-columns:repeat(4,1fr);}
 }
 </style>
 </head>
 <body>
 <div class="shell">
+
+  <!-- SIDEBAR -->
   <nav class="sidebar">
     <div class="sidebar__brand">
       <div class="brand-mark">
@@ -143,6 +200,7 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
     </div>
   </nav>
 
+  <!-- MOBILE TOP BAR -->
   <div class="mobile-topbar">
     <div class="brand-mark">
       <div class="brand-icon" style="width:26px;height:26px;">
@@ -155,78 +213,131 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 
   <main class="main-content">
 
+    <!-- CABEÇALHO -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
       <div>
-        <div class="page-eyebrow">Visão Consolidada</div>
+        <div class="page-eyebrow">Visão Consolidada · Semana {{ seg_iso | date_br }} – {{ dom_iso | date_br }}</div>
         <div class="page-title">Dashboard do Dono</div>
       </div>
-      <a href="/financeiro/exportar{% if filtro_est or filtro_status or filtro_inicio or filtro_fim %}?{% if filtro_est %}estabelecimento_id={{ filtro_est }}&{% endif %}{% if filtro_status %}status={{ filtro_status }}&{% endif %}{% if filtro_inicio %}data_inicio={{ filtro_inicio }}&{% endif %}{% if filtro_fim %}data_fim={{ filtro_fim }}{% endif %}{% endif %}" class="btn btn-ghost btn-sm">
+      <a href="/financeiro/exportar" class="btn btn-ghost btn-sm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar CSV
       </a>
     </div>
 
-    <!-- FILTROS -->
-    <form method="get" action="/dono" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;align-items:flex-end;">
-      <div class="form-group" style="min-width:140px;flex:1;">
-        <label class="form-label">Loja</label>
-        <select class="form-control" name="estabelecimento_id">
-          <option value="">Todas</option>
-          {% for est in estabelecimentos %}
-          <option value="{{ est.id }}" {% if filtro_est == est.id|string %}selected{% endif %}>{{ est.nome }}</option>
-          {% endfor %}
-        </select>
+    <!-- CARDS DE MÉTRICAS -->
+    <div class="stats-row">
+      <a href="/dono?status=vencidos" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'vencidos' %}active-filter{% endif %}" style="--accent-bar:var(--red);">
+          <div class="stat-label">Vencidos</div>
+          <div class="stat-value" style="font-size:16px;color:var(--red);">{{ stats.total_vencido | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_vencido }} boleto{{ 's' if stats.qtd_vencido != 1 }}</div>
+        </div>
+      </a>
+      <a href="/dono?status=hoje" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'hoje' %}active-filter{% endif %}" style="--accent-bar:var(--amber);">
+          <div class="stat-label">Vence Hoje</div>
+          <div class="stat-value" style="font-size:16px;color:var(--amber);">{{ stats.total_hoje | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_hoje }} boleto{{ 's' if stats.qtd_hoje != 1 }}</div>
+        </div>
+      </a>
+      <a href="/dono?status=semana" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'semana' %}active-filter{% endif %}" style="--accent-bar:var(--blue);">
+          <div class="stat-label">Total Semana</div>
+          <div class="stat-value" style="font-size:16px;">{{ stats.total_semana | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_semana }} boleto{{ 's' if stats.qtd_semana != 1 }}</div>
+        </div>
+      </a>
+      <div class="stat-tile" style="--accent-bar:var(--emerald);">
+        <div class="stat-label">Pago no Mês</div>
+        <div class="stat-value" style="font-size:16px;color:var(--emerald);">{{ stats.total_pago_mes | currency }}</div>
+        <div class="stat-sub">{{ stats.qtd_pago_mes }} boleto{{ 's' if stats.qtd_pago_mes != 1 }}</div>
       </div>
+    </div>
+
+    <!-- RESUMO POR LOJA -->
+    {% if resumo_lojas %}
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="section-title">Resumo por Loja</div>
+        <span style="font-size:11px;color:var(--txt-3);">pendentes · clique para filtrar</span>
+      </div>
+      <div class="lojas-grid">
+        {% for loja in resumo_lojas %}
+        <div class="loja-card {% if filtro_loja == loja.id|string %}active-loja{% endif %}"
+             onclick="filtrarLoja('{{ loja.id }}')">
+          <div class="loja-name" title="{{ loja.nome }}">{{ loja.nome }}</div>
+          <div class="loja-valor">{{ loja.total | currency }}</div>
+          <div class="loja-qtd">{{ loja.qtd }} pendente{{ 's' if loja.qtd != 1 }}</div>
+        </div>
+        {% endfor %}
+        {% if filtro_loja %}
+        <div class="loja-card" onclick="filtrarLoja('')"
+             style="display:flex;align-items:center;justify-content:center;color:var(--txt-3);font-size:12px;gap:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Limpar filtro
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- LOTE SEMANAL -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-header" style="margin-bottom:14px;">
+        <div class="section-title">Lote Semanal</div>
+        <span style="font-size:11px;color:var(--txt-3);">Seg–Dom · clique no dia para filtrar</span>
+      </div>
+      <div class="week-grid">
+        {% for dia in lote_semanal %}
+        <div class="day-card {% if dia.is_hoje %}today{% endif %} {% if dia.qtd > 0 %}has-boletos{% endif %}"
+             onclick="filtrarDia('{{ dia.dia_iso }}')" title="{{ dia.dia_iso }}">
+          <div class="day-name">{{ dia.dia_nome }}</div>
+          {% if dia.qtd > 0 %}
+          <div class="day-total">{{ dia.total | currency }}</div>
+          <div class="day-qtd">{{ dia.qtd }} boleto{{ 's' if dia.qtd != 1 }}</div>
+          {% else %}
+          <div class="day-total" style="color:var(--txt-3);font-size:10px;">—</div>
+          <div class="day-qtd">0</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- FILTROS -->
+    <form method="get" action="/dono" id="filtro-form" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:flex-end;">
+      <input type="hidden" name="loja_id" id="input-loja-id" value="{{ filtro_loja }}">
+      <input type="hidden" name="data_inicio" id="input-data-inicio" value="{{ filtro_inicio }}">
+      <input type="hidden" name="data_fim" id="input-data-fim" value="{{ filtro_fim }}">
       <div class="form-group" style="min-width:120px;">
         <label class="form-label">Status</label>
-        <select class="form-control" name="status">
+        <select class="form-control" name="status" onchange="this.form.submit()">
           <option value="">Todos</option>
+          <option value="vencidos" {% if filtro_status == 'vencidos' %}selected{% endif %}>Vencidos</option>
+          <option value="hoje" {% if filtro_status == 'hoje' %}selected{% endif %}>Vence Hoje</option>
+          <option value="semana" {% if filtro_status == 'semana' %}selected{% endif %}>Esta Semana</option>
           {% for s in statuses %}
           <option value="{{ s }}" {% if filtro_status == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-group" style="min-width:120px;">
-        <label class="form-label">De</label>
-        <input class="form-control" type="date" name="data_inicio" value="{{ filtro_inicio }}">
+      <div class="form-group" style="flex:1;min-width:160px;">
+        <label class="form-label">Buscar fornecedor / loja</label>
+        <input class="form-control" type="text" name="busca" value="{{ filtro_busca }}" placeholder="Nome do arquivo ou loja…">
       </div>
-      <div class="form-group" style="min-width:120px;">
-        <label class="form-label">Até</label>
-        <input class="form-control" type="date" name="data_fim" value="{{ filtro_fim }}">
-      </div>
-      <button type="submit" class="btn btn-ghost">Filtrar</button>
+      <button type="submit" class="btn btn-ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Filtrar
+      </button>
       <a href="/dono" class="btn btn-ghost" style="opacity:.6;">Limpar</a>
     </form>
 
-    <!-- CARDS RESUMO -->
-    <div class="stats-row">
-      <div class="stat-tile stat-tile--urgent">
-        <div class="stat-label">Pendente Geral</div>
-        <div class="stat-value" style="font-size:16px;">{{ stats.total_pendente | currency }}</div>
-        <div class="stat-sub">{{ stats.qtd_pendente }} boleto{{ 's' if stats.qtd_pendente != 1 }}</div>
-      </div>
-      <div class="stat-tile" style="--accent-bar:var(--red);">
-        <div class="stat-label">Vence Hoje</div>
-        <div class="stat-value">{{ stats.qtd_hoje }}</div>
-        <div class="stat-sub">{{ stats.total_hoje | currency }}</div>
-      </div>
-      <div class="stat-tile stat-tile--ok">
-        <div class="stat-label">Pago no Mês</div>
-        <div class="stat-value" style="font-size:16px;">{{ stats.total_pago_mes | currency }}</div>
-        <div class="stat-sub">{{ stats.qtd_pago_mes }} boleto{{ 's' if stats.qtd_pago_mes != 1 }}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Total (filtro)</div>
-        <div class="stat-value" style="font-size:16px;">{{ stats.total_filtro | currency }}</div>
-        <div class="stat-sub">{{ boletos | length }} boleto{{ 's' if boletos | length != 1 }}</div>
-      </div>
-    </div>
-
-    <!-- TABELA -->
+    <!-- TABELA PRINCIPAL -->
     <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Boletos</div>
-        <span class="badge badge-em-lote" style="font-size:9px;">{{ boletos | length }} resultado{{ 's' if boletos | length != 1 }}</span>
+        <span class="badge badge-em-lote" style="font-size:9px;">{{ boletos | length }} resultado{{ 's' if boletos | length != 1 }} · R$ {{ stats.total_filtro | currency }}</span>
       </div>
       {% if boletos %}
       <div class="table-wrap">
@@ -234,70 +345,60 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
           <thead>
             <tr>
               <th>Loja</th>
-              <th>Arquivo / Fornecedor</th>
+              <th>Fornecedor / Arquivo</th>
               <th>Valor</th>
               <th>Vencimento</th>
               <th>Status</th>
-              <th>Código de Barras</th>
-              <th>PDF</th>
+              <th>Linha Digitável</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
             {% for b in boletos %}
-            {% set hoje_str = hoje %}
-            {% set venc = b.data_vencimento %}
             {% set sc = b.status.lower().replace(' ','-') %}
+            {% set venc = b.data_vencimento %}
             {% if b.status != 'Pago' %}
-              {% if venc < hoje_str %}
-                {% set venc_badge = 'vencido' %}
-                {% set venc_label = 'Vencido' %}
-              {% elif venc == hoje_str %}
-                {% set venc_badge = 'vence-hoje' %}
-                {% set venc_label = 'Hoje' %}
-              {% else %}
-                {% set venc_badge = 'no-prazo' %}
-                {% set venc_label = '' %}
-              {% endif %}
-            {% else %}
-              {% set venc_badge = '' %}
-              {% set venc_label = '' %}
-            {% endif %}
-            <tr>
+              {% if venc < hoje %}{% set vb = 'vencido' %}{% set vl = 'Vencido' %}
+              {% elif venc == hoje %}{% set vb = 'vence-hoje' %}{% set vl = 'Hoje' %}
+              {% else %}{% set vb = 'no-prazo' %}{% set vl = '' %}{% endif %}
+            {% else %}{% set vb = '' %}{% set vl = '' %}{% endif %}
+            <tr onclick="abrirModal({{ b.id }})" data-id="{{ b.id }}">
               <td style="font-weight:600;white-space:nowrap;">{{ b.estabelecimento }}</td>
-              <td style="font-size:12px;color:var(--txt-2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                {{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or 'Arquivo' }}
+              <td style="font-size:12px;color:var(--txt-2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                {{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or '—' }}
               </td>
               <td class="td-value">{{ b.valor | currency }}</td>
               <td class="td-date">
-                {{ b.data_vencimento | date_br }}
-                {% if venc_badge %}
-                <span class="badge badge-{{ venc_badge }}" style="font-size:9px;margin-left:4px;">{{ venc_label }}</span>
-                {% endif %}
+                {{ venc | date_br }}
+                {% if vb %}<span class="badge badge-{{ vb }}" style="font-size:9px;margin-left:4px;">{{ vl }}</span>{% endif %}
               </td>
               <td><span class="badge badge-{{ sc }}">{{ b.status }}</span></td>
-              <td style="min-width:140px;">
+              <td style="min-width:130px;" onclick="event.stopPropagation()">
                 {% if b.linha_digitavel %}
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                  <span style="font-size:10px;color:var(--txt-2);font-family:monospace;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b.linha_digitavel }}">{{ b.linha_digitavel[:30] }}{% if b.linha_digitavel | length > 30 %}…{% endif %}</span>
-                  <button class="copy-btn" onclick="copiarCodigo(this, '{{ b.linha_digitavel | replace("'", "\\'") }}')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  <span style="font-size:10px;color:var(--txt-2);font-family:monospace;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b.linha_digitavel }}">{{ b.linha_digitavel[:22] }}{% if b.linha_digitavel|length > 22 %}…{% endif %}</span>
+                  <button class="copy-btn" onclick="copiarCodigo(this,'{{ b.linha_digitavel|replace("'","\\'") }}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                     Copiar
                   </button>
-                  <span class="copy-ok">✓ Copiado!</span>
+                  <span class="copy-ok">✓</span>
                 </div>
                 {% else %}
                 <span style="font-size:11px;color:var(--txt-3);">—</span>
                 {% endif %}
               </td>
-              <td>
-                {% if b.arquivo_url %}
-                <a href="{{ b.arquivo_url }}" target="_blank" class="btn btn-ghost btn-sm">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  PDF
-                </a>
-                {% else %}
-                <span style="font-size:11px;color:var(--txt-3);">—</span>
-                {% endif %}
+              <td onclick="event.stopPropagation()">
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <button class="btn btn-ghost btn-sm" onclick="abrirModal({{ b.id }})">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    Detalhes
+                  </button>
+                  {% if b.arquivo_url %}
+                  <a href="{{ b.arquivo_url }}" target="_blank" class="btn btn-ghost btn-sm" title="Ver PDF">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </a>
+                  {% endif %}
+                </div>
               </td>
             </tr>
             {% endfor %}
@@ -305,9 +406,10 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
         </table>
       </div>
       {% else %}
-      <div style="text-align:center;padding:40px 20px;color:var(--txt-3);">
+      <div style="text-align:center;padding:48px 20px;color:var(--txt-3);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;margin:0 auto 12px;opacity:.4;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <div style="font-size:14px;font-weight:500;">Nenhum boleto encontrado</div>
+        <div style="font-size:12px;margin-top:4px;opacity:.6;">Ajuste os filtros acima</div>
       </div>
       {% endif %}
     </div>
@@ -315,24 +417,156 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
   </main>
 </div>
 
+<!-- MODAL DE DETALHES -->
+<div id="modal-backdrop" class="modal-backdrop" hidden onclick="fecharModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="fecharModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-title" id="modal-title">Detalhes do Boleto</div>
+
+    <div id="modal-body">
+      <div class="detail-row"><span class="detail-label">Loja</span><span class="detail-val" id="m-loja">—</span></div>
+      <div class="detail-row"><span class="detail-label">Fornecedor</span><span class="detail-val" id="m-fornecedor">—</span></div>
+      <div class="detail-row"><span class="detail-label">Valor</span><span class="detail-val" id="m-valor">—</span></div>
+      <div class="detail-row"><span class="detail-label">Cadastrado em</span><span class="detail-val" id="m-envio">—</span></div>
+      <div class="detail-row"><span class="detail-label">Vencimento</span><span class="detail-val" id="m-venc">—</span></div>
+      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val" id="m-status">—</span></div>
+      <div id="m-pago-row" class="detail-row" hidden>
+        <span class="detail-label">Pago por</span>
+        <span class="detail-val" id="m-pago">—</span>
+      </div>
+
+      <div id="m-barcode-section" hidden>
+        <hr class="divider" style="margin:14px 0;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);margin-bottom:6px;">Linha Digitável</div>
+        <div class="barcode-box" id="m-barcode">—</div>
+        <button class="btn-copy-big" id="m-copy-btn" onclick="copiarBarcode()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copiar Código de Barras
+        </button>
+      </div>
+
+      <hr class="divider" style="margin:14px 0;">
+      <a id="m-pdf-link" href="#" target="_blank" class="btn btn-ghost" style="width:100%;justify-content:center;" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Visualizar / Baixar PDF
+      </a>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 
+<!-- DADOS DOS BOLETOS PARA O MODAL (JSON embutido) -->
+<script id="boletos-data" type="application/json">
+[
+{% for b in boletos %}
+{
+  "id": {{ b.id }},
+  "estabelecimento": {{ b.estabelecimento | tojson }},
+  "arquivo_nome": {{ (b.arquivo_nome or '') | tojson }},
+  "valor": {{ b.valor }},
+  "data_envio": {{ (b.data_envio or '') | tojson }},
+  "data_vencimento": {{ b.data_vencimento | tojson }},
+  "status": {{ b.status | tojson }},
+  "linha_digitavel": {{ (b.linha_digitavel or '') | tojson }},
+  "pago_em": {{ (b.pago_em or '') | tojson }},
+  "pago_por": {{ (b.pago_por or '') | tojson }},
+  "arquivo_url": {{ (b.arquivo_url or '') | tojson }}
+}{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+</script>
+
 <script>
+// --- Dados ---
+var BOLETOS = JSON.parse(document.getElementById('boletos-data').textContent);
+var boletoMap = {};
+BOLETOS.forEach(function(b){ boletoMap[b.id] = b; });
+
+// --- Modal ---
+function abrirModal(id) {
+  var b = boletoMap[id];
+  if (!b) return;
+  document.getElementById('modal-title').textContent = 'Boleto #' + id;
+  document.getElementById('m-loja').textContent = b.estabelecimento || '—';
+  document.getElementById('m-fornecedor').textContent = b.arquivo_nome || '—';
+  document.getElementById('m-valor').textContent = 'R$ ' + parseFloat(b.valor).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  document.getElementById('m-envio').textContent = formatarData(b.data_envio);
+  document.getElementById('m-venc').textContent = formatarData(b.data_vencimento);
+  document.getElementById('m-status').textContent = b.status;
+  var pagoRow = document.getElementById('m-pago-row');
+  if (b.pago_por) {
+    pagoRow.hidden = false;
+    var txt = b.pago_por;
+    if (b.pago_em) txt += ' em ' + b.pago_em.replace('T',' ').slice(0,16);
+    document.getElementById('m-pago').textContent = txt;
+  } else { pagoRow.hidden = true; }
+  var barcodeSection = document.getElementById('m-barcode-section');
+  if (b.linha_digitavel) {
+    barcodeSection.hidden = false;
+    document.getElementById('m-barcode').textContent = b.linha_digitavel;
+  } else { barcodeSection.hidden = true; }
+  var pdfLink = document.getElementById('m-pdf-link');
+  if (b.arquivo_url) {
+    pdfLink.hidden = false;
+    pdfLink.href = b.arquivo_url;
+  } else { pdfLink.hidden = true; }
+  document.getElementById('modal-backdrop').hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function fecharModal() {
+  document.getElementById('modal-backdrop').hidden = true;
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') fecharModal(); });
+
+function formatarData(iso) {
+  if (!iso) return '—';
+  var parts = iso.slice(0,10).split('-');
+  return parts[2] + '/' + parts[1] + '/' + parts[0];
+}
+
+function copiarBarcode() {
+  var code = document.getElementById('m-barcode').textContent.trim();
+  var btn = document.getElementById('m-copy-btn');
+  navigator.clipboard.writeText(code).then(function(){
+    btn.textContent = '✓ Copiado!';
+    setTimeout(function(){ btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar Código de Barras'; }, 2000);
+  }).catch(function(){ prompt('Copie o código:', code); });
+}
+
+// --- Copiar código inline na tabela ---
 function copiarCodigo(btn, codigo) {
   navigator.clipboard.writeText(codigo).then(function() {
     var row = btn.parentElement;
     var ok = row.querySelector('.copy-ok');
     btn.style.display = 'none';
     ok.style.display = 'inline';
-    setTimeout(function() {
-      btn.style.display = '';
-      ok.style.display = 'none';
-    }, 2000);
-  }).catch(function() {
-    prompt('Copie o código:', codigo);
-  });
+    setTimeout(function() { btn.style.display = ''; ok.style.display = 'none'; }, 2000);
+  }).catch(function() { prompt('Copie o código:', codigo); });
 }
 
+// --- Filtrar por loja (card resumo) ---
+function filtrarLoja(id) {
+  document.getElementById('input-loja-id').value = id;
+  document.getElementById('input-data-inicio').value = '';
+  document.getElementById('input-data-fim').value = '';
+  document.getElementById('filtro-form').submit();
+}
+
+// --- Filtrar por dia do lote semanal ---
+function filtrarDia(iso) {
+  document.getElementById('input-loja-id').value = '';
+  document.getElementById('input-data-inicio').value = iso;
+  document.getElementById('input-data-fim').value = iso;
+  document.getElementById('filtro-form').submit();
+}
+
+// --- Toast ---
 (function(){
   var params = new URLSearchParams(window.location.search);
   var msg = params.get('msg');
@@ -344,14 +578,14 @@ function copiarCodigo(btn, codigo) {
   container.appendChild(el);
   requestAnimationFrame(function(){ el.classList.add('toast--visible'); });
   setTimeout(function(){
-    el.style.transition='opacity .4s,transform .4s';
-    el.style.opacity='0';
-    el.style.transform='translateY(12px)';
+    el.style.transition = 'opacity .4s,transform .4s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(12px)';
     setTimeout(function(){ el.remove(); }, 400);
   }, 3500);
   var url = new URL(window.location.href);
   url.searchParams.delete('msg');
-  history.replaceState(null,'',url.toString());
+  history.replaceState(null, '', url.toString());
 })();
 </script>
 </body>

@@ -4,7 +4,7 @@ import gc
 import io
 import os
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -517,45 +517,118 @@ async def financeiro_exportar(
 @app.get("/dono", response_class=HTMLResponse)
 async def dono_dashboard(
     request: Request,
-    estabelecimento_id: str = "",
+    loja_id: str = "",
     status: str = "",
     data_inicio: str = "",
     data_fim: str = "",
+    busca: str = "",
 ):
-    _require_dono(request)
-    est_id = int(estabelecimento_id) if estabelecimento_id.isdigit() else None
+    user = _require_dono(request)
+    hoje = date.today()
+
+    # semana atual: segunda a domingo
+    seg = hoje - timedelta(days=hoje.weekday())
+    dom = seg + timedelta(days=6)
+
+    # filtros da tabela principal
+    est_id = int(loja_id) if loja_id.isdigit() else None
     di = date.fromisoformat(data_inicio) if data_inicio else None
     df = date.fromisoformat(data_fim) if data_fim else None
-    boletos = db.listar_boletos(
-        estabelecimento_id=est_id,
-        status=status if status and status != "Todos" else None,
-        data_inicio=di,
-        data_fim=df,
-    )
-    hoje = date.today()
-    mes_inicio = date(hoje.year, hoje.month, 1)
-    todos_pendentes = db.listar_boletos(status="Pendente")
-    urgentes = db.listar_boletos(data_inicio=hoje, data_fim=hoje)
-    pagos_mes = db.listar_boletos(status="Pago", data_inicio=mes_inicio)
-    stats = {
-        "total_pendente": sum(float(r["valor"]) for r in todos_pendentes),
-        "qtd_pendente": len(todos_pendentes),
-        "qtd_hoje": len(urgentes),
-        "total_hoje": sum(float(r["valor"]) for r in urgentes),
-        "total_pago_mes": sum(float(r["valor"]) for r in pagos_mes),
-        "qtd_pago_mes": len(pagos_mes),
-        "total_filtro": sum(float(r["valor"]) for r in boletos),
+
+    status_map = {
+        "vencidos": None,  # tratado abaixo
+        "hoje": None,
+        "semana": None,
+        "todos": None,
+        "": None,
     }
+    status_db = status if status not in ("vencidos", "hoje", "semana", "todos", "") else None
+
+    todos = db.listar_boletos(estabelecimento_id=est_id, status=status_db, data_inicio=di, data_fim=df)
+
+    # filtro de busca por nome do arquivo/fornecedor
+    busca_lower = busca.strip().lower()
+    if busca_lower:
+        todos = [b for b in todos if busca_lower in (b.get("arquivo_nome") or "").lower()
+                 or busca_lower in (b.get("estabelecimento") or "").lower()]
+
+    # filtro por atalho de status
+    if status == "vencidos":
+        boletos = [b for b in todos if b["status"] not in ("Pago",) and b["data_vencimento"] < hoje.isoformat()]
+    elif status == "hoje":
+        boletos = [b for b in todos if b["data_vencimento"] == hoje.isoformat()]
+    elif status == "semana":
+        boletos = [b for b in todos if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
+    else:
+        boletos = todos
+
+    # métricas consolidadas (sem filtro de loja/busca para os cards)
+    todos_sem_filtro = db.listar_boletos()
+    mes_inicio = date(hoje.year, hoje.month, 1)
+    pagos_mes = [b for b in todos_sem_filtro if b["status"] == "Pago"
+                 and b.get("pago_em", "") and b["pago_em"][:7] == hoje.isoformat()[:7]]
+
+    pendentes_geral = [b for b in todos_sem_filtro if b["status"] not in ("Pago",)]
+    vencidos_geral  = [b for b in pendentes_geral if b["data_vencimento"] < hoje.isoformat()]
+    hoje_geral      = [b for b in pendentes_geral if b["data_vencimento"] == hoje.isoformat()]
+    semana_geral    = [b for b in pendentes_geral if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
+
+    stats = {
+        "total_vencido":   sum(float(b["valor"]) for b in vencidos_geral),
+        "qtd_vencido":     len(vencidos_geral),
+        "total_hoje":      sum(float(b["valor"]) for b in hoje_geral),
+        "qtd_hoje":        len(hoje_geral),
+        "total_semana":    sum(float(b["valor"]) for b in semana_geral),
+        "qtd_semana":      len(semana_geral),
+        "total_pago_mes":  sum(float(b["valor"]) for b in pagos_mes),
+        "qtd_pago_mes":    len(pagos_mes),
+        "total_filtro":    sum(float(b["valor"]) for b in boletos),
+    }
+
+    # resumo por loja (apenas pendentes)
+    from collections import defaultdict
+    resumo_lojas: dict = defaultdict(lambda: {"nome": "", "qtd": 0, "total": 0.0, "id": None})
+    for b in pendentes_geral:
+        k = b["estabelecimento_id"]
+        resumo_lojas[k]["nome"] = b["estabelecimento"]
+        resumo_lojas[k]["id"] = k
+        resumo_lojas[k]["qtd"] += 1
+        resumo_lojas[k]["total"] += float(b["valor"])
+    resumo_lojas_list = sorted(resumo_lojas.values(), key=lambda x: -x["total"])
+
+    # lote semanal: boletos da semana agrupados por dia
+    DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    semana_boletos = [b for b in todos_sem_filtro if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
+    lote_semanal = []
+    for i in range(7):
+        dia = seg + timedelta(days=i)
+        dia_str = dia.isoformat()
+        dia_boletos = [b for b in semana_boletos if b["data_vencimento"] == dia_str]
+        lote_semanal.append({
+            "dia_nome": DIAS_PT[i],
+            "dia_iso": dia_str,
+            "is_hoje": dia == hoje,
+            "total": sum(float(b["valor"]) for b in dia_boletos),
+            "qtd": len(dia_boletos),
+            "boletos": dia_boletos,
+        })
+
+    estabelecimentos = db.listar_estabelecimentos()
     return _tpl(
-        request, "dono_dashboard.html", user=None,
+        request, "dono_dashboard.html", user=user,
         boletos=boletos,
-        estabelecimentos=db.listar_estabelecimentos(),
+        estabelecimentos=estabelecimentos,
         statuses=db.STATUSES,
         stats=stats,
-        filtro_est=estabelecimento_id,
+        resumo_lojas=resumo_lojas_list,
+        lote_semanal=lote_semanal,
+        seg_iso=seg.isoformat(),
+        dom_iso=dom.isoformat(),
+        filtro_loja=loja_id,
         filtro_status=status,
         filtro_inicio=data_inicio,
         filtro_fim=data_fim,
+        filtro_busca=busca,
         hoje=hoje.isoformat(),
     )
 
