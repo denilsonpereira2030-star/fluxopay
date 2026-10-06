@@ -253,18 +253,16 @@ def _init_db_inner() -> None:
             cur.execute(
                 f"ALTER TABLE boletos ADD COLUMN IF NOT EXISTS {col} {definition}"
             )
-        # Expande CHECK de perfil se necessário (PG não permite ALTER CHECK inline — usa ALTER)
+        # Recria o CHECK de perfil de forma segura (IF NOT EXISTS não existe no ADD CONSTRAINT do PG)
         cur.execute("""
-            SELECT conname FROM pg_constraint
-            WHERE conrelid='usuarios'::regclass AND contype='c' AND conname LIKE '%perfil%'
-        """)
-        constraint = cur.fetchone()
-        if constraint:
-            cname = constraint[0] if isinstance(constraint, tuple) else constraint["conname"]
-            cur.execute(f"ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS {cname}")
-        cur.execute("""
-            ALTER TABLE usuarios ADD CONSTRAINT IF NOT EXISTS usuarios_perfil_check
-            CHECK(perfil IN ('gerente','financeiro','dono'))
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'usuarios_perfil_check') THEN
+                    ALTER TABLE usuarios DROP CONSTRAINT usuarios_perfil_check;
+                END IF;
+                ALTER TABLE usuarios ADD CONSTRAINT usuarios_perfil_check
+                    CHECK (perfil IN ('gerente', 'financeiro', 'dono', 'admin'));
+            END $$;
         """)
         # remove coluna BLOB se ainda existir (migração de versão anterior)
         cur.execute("""
