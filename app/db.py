@@ -38,6 +38,28 @@ if _supabase_url and _supabase_key:
         print(f"[db] Supabase indisponível: {_e}", flush=True)
 
 SUPABASE_BUCKET = "boletos"
+import urllib.request
+import os
+
+def get_boleto_arquivo(boleto_id):
+    b = get_boleto_by_id(boleto_id)
+    if not b:
+        return None
+    url = b.get("arquivo_url")
+    if url:
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read()
+        except Exception as e:
+            print(f"Erro ao baixar do Supabase: {e}", flush=True)
+    caminho = b.get("caminho_arquivo")
+    if caminho and os.path.exists(caminho):
+        try:
+            with open(caminho, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+    return None
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
