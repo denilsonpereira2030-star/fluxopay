@@ -977,3 +977,47 @@ async def tarefa_importar_emails(token: str = ""):
         return {"ok": False, "erro": "Gmail não configurado"}
     iniciou = importador_email.importar_em_segundo_plano()
     return {"ok": True, "iniciou": iniciou, "ultima": importador_email.ultima_execucao}
+
+
+def _checar_token(token: str) -> None:
+    import hmac
+    esperado = os.getenv("CRON_TOKEN", "")
+    if not esperado or not hmac.compare_digest(token, esperado):
+        raise HTTPException(403)
+
+
+@app.get("/tarefas/testar-ia")
+def tarefa_testar_ia(token: str = ""):
+    """Diagnóstico: gera um boleto de teste, manda ao Gemini e mostra o que voltou."""
+    _checar_token(token)
+    if not leitor_boleto.gemini_disponivel():
+        return {"ok": False, "erro": "GEMINI_API_KEY não configurada"}
+    from reportlab.pdfgen import canvas as _cv
+    buf = io.BytesIO()
+    c = _cv.Canvas(buf)
+    c.setFont("Helvetica", 12)
+    for i, t in enumerate(["Beneficiário: DISTRIBUIDORA TESTE LTDA", "Pagador: LOJA EXEMPLO LTDA",
+                           "Vencimento: 30/11/2026", "Valor do documento: R$ 123,45",
+                           "34191.09008 00123.456782 90123.456783 7 16380000123456"]):
+        c.drawString(40, 800 - i * 22, t)
+    c.save()
+    inicio = datetime.now()
+    r = leitor_boleto.ler_com_gemini(buf.getvalue(), "application/pdf")
+    return {"ok": bool(r), "modelo": leitor_boleto._modelo_ok, "resposta": r,
+            "segundos": round((datetime.now() - inicio).total_seconds(), 1)}
+
+
+@app.get("/tarefas/reler-revisao")
+def tarefa_reler_revisao(token: str = ""):
+    """Relê com IA tudo que está na Caixa de Entrada (revisão)."""
+    _checar_token(token)
+    lojas = db.listar_estabelecimentos()
+    cont: dict[str, int] = {}
+    for imp in db.listar_importacoes(status="revisao", limite=25):
+        r = importador_email.reler_importacao(imp, lojas)
+        cont[r] = cont.get(r, 0) + 1
+        gc.collect()
+    return {"ok": True, "resultado": cont,
+            "itens": [{k: i.get(k) for k in ("id", "status", "fornecedor", "valor", "data_vencimento",
+                                             "pagador_nome", "pagador_cnpj", "estabelecimento", "motivo")}
+                      for i in db.listar_importacoes(limite=12)]}
