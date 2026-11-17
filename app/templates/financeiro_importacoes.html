@@ -65,6 +65,11 @@
 {% endif %}
 
 {% if aba == 'revisao' %}
+{% if itens and gemini_ok %}
+<form method="post" action="/financeiro/importacoes/reler-todos" style="margin-bottom:12px;display:flex;justify-content:flex-end;">
+  <button class="btn btn-ghost btn-sm" type="submit">Ler todos de novo com IA ({{ itens|length }})</button>
+</form>
+{% endif %}
 <div style="display:flex;flex-direction:column;gap:14px;">
   {% for i in itens %}
   <div class="card imp-card" id="imp-{{ i.id }}">
@@ -77,6 +82,13 @@
       <a href="{{ i.arquivo_url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver arquivo</a>
       {% endif %}
     </div>
+    {% if i.pagador_nome or i.pagador_cnpj %}
+    <div class="imp-pagador">
+      <span class="detail-label">Pagador no boleto</span>
+      <b>{{ i.pagador_nome or '—' }}</b>
+      {% if i.pagador_cnpj and i.pagador_cnpj|length == 14 %}<span class="text-faint">· {{ i.pagador_cnpj[:2] }}.{{ i.pagador_cnpj[2:5] }}.{{ i.pagador_cnpj[5:8] }}/{{ i.pagador_cnpj[8:12] }}-{{ i.pagador_cnpj[12:] }}</span>{% endif %}
+    </div>
+    {% endif %}
     {% if i.motivo %}<div class="imp-motivo">⚠ {{ i.motivo }}</div>{% endif %}
 
     <form method="post" action="/financeiro/importacoes/{{ i.id }}/aprovar" class="imp-form">
@@ -108,7 +120,9 @@
       <div class="imp-acoes imp-full">
         <button class="btn btn-success" type="submit">Aprovar e salvar</button>
         <button class="btn btn-ghost" type="submit" formaction="/financeiro/importacoes/{{ i.id }}/descartar" formnovalidate>Descartar</button>
+        {% if gemini_ok %}<button class="btn btn-ghost" type="submit" formaction="/financeiro/importacoes/{{ i.id }}/reler" formnovalidate>Ler de novo com IA</button>{% endif %}
         {% if i.usou_ia %}<span class="text-sm text-faint">lido com IA</span>{% endif %}
+        {% if i.pagador_cnpj %}<span class="text-sm text-faint">· ao aprovar, o CNPJ do pagador fica vinculado à loja escolhida (se ela ainda não tiver)</span>{% endif %}
       </div>
     </form>
   </div>
@@ -166,6 +180,8 @@
 .imp-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;}
 .imp-assunto{font-weight:700;color:var(--txt-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .imp-motivo{font-size:12px;color:var(--amber);background:var(--amber-dim);border:1px solid var(--amber-bdr);border-radius:var(--r-md);padding:7px 10px;margin-bottom:12px;}
+.imp-pagador{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:13px;margin-bottom:10px;}
+.imp-pagador .detail-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);}
 .imp-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
 .imp-full{grid-column:1/-1;}
 .imp-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}

@@ -326,9 +326,19 @@ def _init_db_inner() -> None:
             boleto_id INTEGER,
             criado_em TEXT NOT NULL,
             resolvido_por TEXT,
-            resolvido_em TEXT
+            resolvido_em TEXT,
+            pagador_nome TEXT,
+            pagador_cnpj TEXT
         )
     """)
+    if _USE_PG:
+        for col in ("pagador_nome", "pagador_cnpj"):
+            cur.execute(f"ALTER TABLE importacoes ADD COLUMN IF NOT EXISTS {col} TEXT")
+    else:
+        imp_cols = [r["name"] for r in conn.execute("PRAGMA table_info(importacoes)").fetchall()]
+        for col in ("pagador_nome", "pagador_cnpj"):
+            if col not in imp_cols:
+                conn.execute(f"ALTER TABLE importacoes ADD COLUMN {col} TEXT")
 
     conn.commit()
     conn.close()
@@ -850,6 +860,15 @@ def atualizar_cnpj_loja(estabelecimento_id: int, cnpj: str | None) -> None:
 # ── importações (e-mail → boleto) ────────────────────────────────────────────
 
 IMPORTACAO_STATUS = ("importado", "revisao", "duplicado", "descartado", "ignorado")
+
+
+def get_estabelecimento(estabelecimento_id: int) -> dict | None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT id, nome, cnpj FROM estabelecimentos WHERE id={_ph()}", (estabelecimento_id,))
+    row = _fetchone(cur)
+    _release(conn)
+    return row
 
 
 def importacao_existe(chave: str) -> bool:

@@ -137,6 +137,7 @@ def processar_anexo(
         data_vencimento=leitura.vencimento.isoformat() if leitura.vencimento else None,
         linha_digitavel=leitura.linha_digitavel,
         codigo_valido=int(leitura.codigo_valido), usou_ia=int(leitura.usou_ia),
+        pagador_nome=leitura.pagador_nome, pagador_cnpj=leitura.pagador_cnpj,
     )
 
     # 1) não é boleto (nota fiscal, comprovante, etc.)
@@ -290,3 +291,54 @@ def importar_em_segundo_plano() -> bool:
 
 def em_andamento() -> bool:
     return _lock.locked()
+
+
+def reler_importacao(imp: dict, lojas: list[dict]) -> str:
+    """Lê de novo um item da Caixa de Entrada (ex.: depois de configurar o Gemini
+    ou cadastrar CNPJs). Se ficar completo, salva o boleto direto."""
+    dados = None
+    url = imp.get("arquivo_url") or ""
+    try:
+        if url.startswith("/uploads/"):
+            from pathlib import Path
+            dados = (Path(db.BASE_DIR) / url.lstrip("/")).read_bytes()
+        elif url.startswith("http"):
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                dados = resp.read(12 * 1024 * 1024)
+    except Exception as exc:
+        print(f"[reler] #{imp['id']}: não baixou o arquivo: {exc!r}", flush=True)
+    if not dados:
+        return "sem_arquivo"
+    leitura = leitor_boleto.ler_boleto(
+        dados, "application/pdf" if dados[:4] == b"%PDF" else "image/jpeg", lojas,
+        texto_extra=imp.get("assunto") or "",
+    )
+    del dados
+    gc.collect()
+    campos = dict(
+        estabelecimento_id=leitura.estabelecimento_id or imp.get("estabelecimento_id"),
+        fornecedor=leitura.fornecedor or imp.get("fornecedor"),
+        valor=leitura.valor or imp.get("valor"),
+        data_vencimento=leitura.vencimento.isoformat() if leitura.vencimento else imp.get("data_vencimento"),
+        linha_digitavel=leitura.linha_digitavel or imp.get("linha_digitavel"),
+        codigo_valido=int(leitura.codigo_valido), usou_ia=int(leitura.usou_ia),
+        pagador_nome=leitura.pagador_nome or imp.get("pagador_nome"),
+        pagador_cnpj=leitura.pagador_cnpj or imp.get("pagador_cnpj"),
+        motivo="; ".join(leitura.observacoes) or None,
+    )
+    if leitura.linha_digitavel:
+        existente = db.boleto_por_linha(leitura.linha_digitavel)
+        if existente:
+            db.atualizar_importacao(imp["id"], **campos, status="duplicado", boleto_id=existente["id"])
+            return "duplicado"
+    if leitura.completa():
+        boleto_id = db.salvar_boleto(
+            leitura.estabelecimento_id, imp.get("arquivo_nome") or "boleto.pdf", url,
+            float(leitura.valor), leitura.vencimento, leitura.linha_digitavel,
+            fornecedor=leitura.fornecedor, criado_por=f"e-mail · {imp.get('remetente') or ''}"[:120],
+        )
+        db.atualizar_importacao(imp["id"], **campos, status="importado", boleto_id=boleto_id)
+        return "importado"
+    db.atualizar_importacao(imp["id"], **campos)
+    return "revisao"

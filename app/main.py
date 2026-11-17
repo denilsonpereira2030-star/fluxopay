@@ -905,12 +905,46 @@ async def financeiro_importacao_aprovar(
         est_id, imp.get("arquivo_nome") or "boleto.pdf", imp.get("arquivo_url") or "", v, venc, linha,
         fornecedor=fornecedor[:120], criado_por=f"e-mail · {imp.get('remetente') or ''} (aprovado por {user['login']})"[:120],
     )
+    # Aprende: se o boleto trazia o CNPJ do pagador e a loja ainda não tem CNPJ, grava.
+    aprendeu = ""
+    pc = imp.get("pagador_cnpj")
+    if pc and leitor_boleto.cnpj_valido(pc):
+        loja = db.get_estabelecimento(est_id)
+        if loja and not loja.get("cnpj"):
+            db.atualizar_cnpj_loja(est_id, pc)
+            aprendeu = f" · CNPJ {leitor_boleto.formatar_cnpj(pc)} vinculado a {loja['nome']}"
     db.atualizar_importacao(
         imp_id, status="importado", boleto_id=boleto_id, estabelecimento_id=est_id,
         fornecedor=fornecedor[:120] or None, valor=v, data_vencimento=venc.isoformat(), linha_digitavel=linha,
         resolvido_por=user["login"], resolvido_em=datetime.now().isoformat(timespec="seconds"),
     )
-    return RedirectResponse(f"/financeiro/importacoes?msg={quote(f'Boleto #{boleto_id} salvo')}", status_code=303)
+    return RedirectResponse(f"/financeiro/importacoes?msg={quote(f'Boleto #{boleto_id} salvo{aprendeu}')}", status_code=303)
+
+
+@app.post("/financeiro/importacoes/{imp_id}/reler")
+def financeiro_importacao_reler(imp_id: int, request: Request):
+    _require_financeiro(request)
+    imp = db.get_importacao(imp_id)
+    if not imp or imp["status"] != "revisao":
+        return RedirectResponse("/financeiro/importacoes", status_code=303)
+    r = importador_email.reler_importacao(imp, db.listar_estabelecimentos())
+    msgs = {"importado": "Lido e salvo automaticamente!", "duplicado": "Esse boleto já estava cadastrado",
+            "revisao": "Lido de novo — confira os campos", "sem_arquivo": "Não consegui abrir o arquivo"}
+    return RedirectResponse(f"/financeiro/importacoes?msg={quote(msgs[r])}#imp-{imp_id}", status_code=303)
+
+
+@app.post("/financeiro/importacoes/reler-todos")
+def financeiro_importacao_reler_todos(request: Request):
+    _require_financeiro(request)
+    lojas = db.listar_estabelecimentos()
+    cont: dict[str, int] = {}
+    for imp in db.listar_importacoes(status="revisao", limite=25):
+        r = importador_email.reler_importacao(imp, lojas)
+        cont[r] = cont.get(r, 0) + 1
+        gc.collect()
+    rot = {"importado": "salvo(s)", "revisao": "ainda p/ revisar", "duplicado": "duplicado(s)", "sem_arquivo": "sem arquivo"}
+    resumo = ", ".join(f"{n} {rot.get(k, k)}" for k, n in cont.items()) or "nada para reler"
+    return RedirectResponse(f"/financeiro/importacoes?msg={quote(resumo)}", status_code=303)
 
 
 @app.post("/financeiro/importacoes/{imp_id}/descartar")
