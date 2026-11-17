@@ -20,9 +20,15 @@
     <div class="form-group">
       <label class="form-label">Arquivo</label>
       <div style="background:var(--void);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 13px;font-size:13px;color:var(--txt-2);">
-        {{ boleto.caminho_arquivo.split('/')[-1] }}
+        {{ boleto.arquivo_nome or (boleto.arquivo_url.split('/')[-1] if boleto.arquivo_url else 'Arquivo') }}
       </div>
       <div class="text-sm text-faint" style="margin-top:4px;">O arquivo não pode ser alterado após o cadastro</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="fornecedor">Fornecedor</label>
+      <input class="form-control" id="fornecedor" name="fornecedor" type="text" maxlength="120"
+             value="{{ boleto.fornecedor or '' }}" placeholder="Ex.: Ipiranga, Ambev, Copel…">
     </div>
 
     <div class="form-group">

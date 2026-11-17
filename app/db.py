@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import urllib.request
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -38,28 +39,6 @@ if _supabase_url and _supabase_key:
         print(f"[db] Supabase indisponível: {_e}", flush=True)
 
 SUPABASE_BUCKET = "boletos"
-import urllib.request
-import os
-
-def get_boleto_arquivo(boleto_id):
-    b = get_boleto_by_id(boleto_id)
-    if not b:
-        return None
-    url = b.get("arquivo_url")
-    if url:
-        try:
-            with urllib.request.urlopen(url) as response:
-                return response.read()
-        except Exception as e:
-            print(f"Erro ao baixar do Supabase: {e}", flush=True)
-    caminho = b.get("caminho_arquivo")
-    if caminho and os.path.exists(caminho):
-        try:
-            with open(caminho, "rb") as f:
-                return f.read()
-        except Exception:
-            pass
-    return None
 
 STATUSES = ["Pendente", "Em Lote", "Pago"]
 
@@ -258,7 +237,12 @@ def _init_db_inner() -> None:
             valor REAL NOT NULL,
             data_vencimento TEXT NOT NULL,
             data_envio TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'Pendente'
+            status TEXT NOT NULL DEFAULT 'Pendente',
+            linha_digitavel TEXT,
+            pago_em TEXT,
+            pago_por TEXT,
+            fornecedor TEXT,
+            criado_por TEXT
         )
     """)
 
@@ -271,6 +255,8 @@ def _init_db_inner() -> None:
             ("linha_digitavel", "TEXT"),
             ("pago_em", "TEXT"),
             ("pago_por", "TEXT"),
+            ("fornecedor", "TEXT"),
+            ("criado_por", "TEXT"),
         ]:
             cur.execute(
                 f"ALTER TABLE boletos ADD COLUMN IF NOT EXISTS {col} {definition}"
@@ -303,6 +289,8 @@ def _init_db_inner() -> None:
             ("linha_digitavel", "TEXT"),
             ("pago_em", "TEXT"),
             ("pago_por", "TEXT"),
+            ("fornecedor", "TEXT"),
+            ("criado_por", "TEXT"),
         ]:
             if col not in cols:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
@@ -318,9 +306,14 @@ def _init_db_inner() -> None:
 # ── garantia do usuário dono ─────────────────────────────────────────────────
 
 def garantir_usuario_dono() -> None:
-    """Sempre executado no boot: UPSERT do pedro com perfil dono e hash correto."""
+    """Executado no boot: garante que o pedro exista com perfil 'dono'.
+
+    Se o usuário já existe, só corrige o perfil — NÃO mexe na senha. (Antes a
+    senha era resetada para a padrão a cada reinício do Render, desfazendo a
+    troca feita em /financeiro/admin.) A senha padrão só é usada na criação.
+    """
     import hashlib
-    senha_hash = hashlib.sha256("pedro123".encode()).hexdigest()
+    senha_hash = hashlib.sha256(os.getenv("DONO_SENHA_INICIAL", "pedro123").encode()).hexdigest()
     ph = "%s" if _USE_PG else "?"
     try:
         conn = get_connection()
@@ -329,8 +322,8 @@ def garantir_usuario_dono() -> None:
         existe = cur.fetchone()
         if existe:
             cur.execute(
-                f"UPDATE usuarios SET senha={ph}, perfil={ph} WHERE login={ph}",
-                (senha_hash, "dono", "pedro"),
+                f"UPDATE usuarios SET perfil={ph} WHERE login={ph}",
+                ("dono", "pedro"),
             )
         else:
             cur.execute(
@@ -478,7 +471,8 @@ def listar_boletos(
         SELECT b.id, b.estabelecimento_id, e.nome AS estabelecimento,
                b.arquivo_nome, b.arquivo_url,
                b.valor, b.data_vencimento, b.data_envio, b.status,
-               b.linha_digitavel, b.pago_em, b.pago_por
+               b.linha_digitavel, b.pago_em, b.pago_por,
+               b.fornecedor, b.criado_por
         FROM boletos b
         INNER JOIN estabelecimentos e ON e.id = b.estabelecimento_id
     """
@@ -577,6 +571,8 @@ def salvar_boleto(
     valor: float,
     data_vencimento: date,
     linha_digitavel: str | None = None,
+    fornecedor: str | None = None,
+    criado_por: str | None = None,
 ) -> int:
     conn = get_connection()
     try:
@@ -584,12 +580,14 @@ def salvar_boleto(
         cur.execute(
             f"""INSERT INTO boletos
                 (estabelecimento_id, arquivo_nome, arquivo_url,
-                 valor, data_vencimento, data_envio, status, linha_digitavel)
-                VALUES ({_ph(8)})""",
+                 valor, data_vencimento, data_envio, status, linha_digitavel,
+                 fornecedor, criado_por)
+                VALUES ({_ph(10)})""",
             (
                 estabelecimento_id, arquivo_nome, arquivo_url,
                 valor, data_vencimento.isoformat(), date.today().isoformat(),
                 "Pendente", linha_digitavel,
+                (fornecedor or "").strip() or None, criado_por,
             ),
         )
         if _USE_PG:
@@ -612,9 +610,13 @@ def atualizar_boleto(
     linha_digitavel: str | None = None,
     pago_em: str | None = None,
     pago_por: str | None = None,
+    fornecedor: str | None = None,
 ) -> None:
     ph = "%s" if _USE_PG else "?"
     campos, params = [], []
+    if fornecedor is not None:
+        campos.append(f"fornecedor = {ph}")
+        params.append(fornecedor.strip() or None)
     if valor is not None:
         campos.append(f"valor = {ph}")
         params.append(valor)
@@ -672,6 +674,7 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
         f"""SELECT b.id, b.estabelecimento_id, b.arquivo_nome, b.arquivo_url,
                    b.valor, b.data_vencimento, b.data_envio, b.status,
                    b.linha_digitavel, b.pago_em, b.pago_por,
+                   b.fornecedor, b.criado_por,
                    e.nome AS estabelecimento
             FROM boletos b JOIN estabelecimentos e ON e.id=b.estabelecimento_id
             WHERE b.id={ph}""",
@@ -680,6 +683,60 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
     row = _fetchone(cur)
     _release(conn)
     return row
+
+
+# ── arquivo do boleto (bytes) ────────────────────────────────────────────────
+
+_DOWNLOAD_TIMEOUT = 20            # segundos por arquivo
+_DOWNLOAD_MAX_BYTES = 15 * 1024 * 1024  # protege os 512 MB do Render
+
+
+def _caminho_local(url: str) -> Path | None:
+    """Converte '/uploads/arquivo.pdf' (fallback de dev) em caminho no disco."""
+    if not url or not url.startswith("/uploads/"):
+        return None
+    p = (BASE_DIR / "uploads" / url.split("/uploads/", 1)[1]).resolve()
+    if (BASE_DIR / "uploads").resolve() not in p.parents:
+        return None
+    return p
+
+
+def get_boleto_arquivo(boleto_id: int) -> bytes | None:
+    """Baixa os bytes do arquivo do boleto (Supabase Storage ou disco local).
+
+    Nunca levanta exceção: em qualquer falha (rede, 404, arquivo grande demais,
+    arquivo ausente) registra no log e devolve None, para que o lote continue.
+    """
+    try:
+        b = get_boleto_by_id(boleto_id)
+    except Exception as exc:
+        print(f"[arquivo] boleto #{boleto_id}: erro ao consultar banco: {exc}", flush=True)
+        return None
+    if not b:
+        return None
+
+    url = (b.get("arquivo_url") or "").strip()
+
+    local = _caminho_local(url)
+    if local is not None:
+        try:
+            return local.read_bytes() if local.is_file() else None
+        except OSError as exc:
+            print(f"[arquivo] boleto #{boleto_id}: erro lendo disco: {exc}", flush=True)
+            return None
+
+    if url.startswith(("http://", "https://")):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "FluxoPay/1.0"})
+            with urllib.request.urlopen(req, timeout=_DOWNLOAD_TIMEOUT) as resp:
+                dados = resp.read(_DOWNLOAD_MAX_BYTES + 1)
+            if len(dados) > _DOWNLOAD_MAX_BYTES:
+                print(f"[arquivo] boleto #{boleto_id}: arquivo maior que o limite, ignorado", flush=True)
+                return None
+            return dados
+        except Exception as exc:
+            print(f"[arquivo] boleto #{boleto_id}: falha ao baixar ({type(exc).__name__}: {exc})", flush=True)
+    return None
 
 
 def trocar_senha_usuario(login: str, nova_senha: str) -> bool:
@@ -709,14 +766,17 @@ def exportar_boletos_csv(
     )
     buf = _io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["Loja", "Arquivo", "Valor", "Vencimento", "Status", "Pago Em", "Pago Por", "Linha Digitável"])
+    writer.writerow(["Loja", "Fornecedor", "Arquivo", "Valor", "Vencimento", "Status",
+                     "Lançado Por", "Pago Em", "Pago Por", "Linha Digitável"])
     for r in rows:
         writer.writerow([
             r.get("estabelecimento", ""),
+            r.get("fornecedor", "") or "",
             r.get("arquivo_nome", ""),
             f"{float(r['valor']):.2f}",
             r.get("data_vencimento", ""),
             r.get("status", ""),
+            r.get("criado_por", "") or "",
             r.get("pago_em", "") or "",
             r.get("pago_por", "") or "",
             r.get("linha_digitavel", "") or "",

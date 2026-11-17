@@ -30,6 +30,7 @@
   <form method="post" action="/gerente/boleto" enctype="multipart/form-data" id="form-confirma" style="display:contents;">
     <input type="hidden" name="valor" value="{{ dup_valor }}">
     <input type="hidden" name="data_vencimento" value="{{ dup_vencimento }}">
+    <input type="hidden" name="fornecedor" value="{{ dup_fornecedor or '' }}">
     <input type="hidden" name="confirmar_duplicata" value="1">
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <label class="btn btn-primary" style="cursor:pointer;position:relative;">
@@ -90,6 +91,14 @@
         <button type="button" class="upload-clear" id="upload-clear" title="Remover">✕</button>
       </div>
 
+    </div>
+
+    <!-- FORNECEDOR -->
+    <div class="form-group">
+      <label class="form-label" for="fornecedor">Fornecedor</label>
+      <input class="form-control" id="fornecedor" name="fornecedor" type="text" maxlength="120"
+             placeholder="Ex.: Ipiranga, Ambev, Copel…" autocomplete="off"
+             value="{{ dup_fornecedor if dup_fornecedor is defined else '' }}">
     </div>
 
     <!-- VALOR -->

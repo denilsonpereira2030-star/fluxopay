@@ -146,6 +146,48 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 .toast.toast--visible{opacity:1;transform:translateY(0);}
 .toast-icon{width:15px;height:15px;flex-shrink:0;color:var(--emerald);}
 
+/* lote semanal — detalhe a pagar x pago */
+.week-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+.week-tot{font-family:var(--ff-head);font-size:18px;font-weight:800;letter-spacing:-.02em;}
+.week-split{font-size:11px;color:var(--txt-3);}
+.week-split b{font-weight:700;}
+.day-card.passado{opacity:.7;}
+.day-card.sel{border-color:var(--blue-hi);box-shadow:0 0 0 1px var(--blue-hi);}
+.day-date{font-size:10px;color:var(--txt-3);margin-bottom:6px;}
+.day-pend{font-size:10px;color:var(--amber);margin-top:4px;font-weight:600;}
+.day-pago{font-size:10px;color:var(--emerald);font-weight:600;}
+
+/* resumo lojas — detalhe */
+.loja-meta{display:flex;justify-content:space-between;gap:6px;font-size:10px;color:var(--txt-3);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;}
+.loja-venc{color:var(--red);font-weight:700;}
+.loja-card.zerada .loja-valor{color:var(--txt-3);}
+
+/* chips de filtros ativos */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 14px;}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;background:var(--blue-dim);border:1px solid var(--blue-glow);color:var(--blue-hi);font-size:11px;font-weight:600;}
+.chip a{color:inherit;opacity:.7;font-weight:700;}
+.chip a:hover{opacity:1;}
+
+/* tabela */
+.td-forn{font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.td-sub{font-size:11px;color:var(--txt-3);font-weight:400;}
+.tbl-foot{display:flex;justify-content:space-between;padding:12px 12px 2px;border-top:1px solid var(--border);font-size:12px;color:var(--txt-2);}
+.tbl-foot b{font-family:var(--ff-head);color:var(--txt-1);}
+
+/* modal raio-x */
+.xr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;padding-right:28px;}
+.xr-valor{font-family:var(--ff-head);font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.1;}
+.xr-forn{font-size:13px;color:var(--txt-2);margin-top:2px;}
+.xr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;}
+.xr-item .detail-label{display:block;min-width:0;margin-bottom:2px;}
+.xr-item .detail-val{display:block;font-weight:500;}
+.xr-full{grid-column:1/-1;}
+.xr-pago{background:var(--emerald-dim);border:1px solid var(--emerald-bdr);border-radius:var(--r-md);padding:10px 12px;color:var(--emerald);font-size:12.5px;font-weight:600;margin-top:14px;}
+.xr-alerta{background:var(--red-dim);border:1px solid var(--red-bdr);border-radius:var(--r-md);padding:10px 12px;color:var(--red);font-size:12.5px;font-weight:600;margin-top:14px;}
+.xr-acoes{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.btn-lg{padding:10px 12px;font-size:13px;}
+.btn-copy-big.ok{background:var(--emerald);}
+
 /* responsive */
 @media(max-width:900px){
   .stats-row{grid-template-columns:1fr 1fr;}
@@ -154,14 +196,17 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 @media(max-width:768px){
   .sidebar{display:none;}
   .main-content{margin-left:0;max-width:100%;padding:12px;}
+  .shell{flex-direction:column;}
   .mobile-topbar{display:flex;}
-  .stats-row{grid-template-columns:1fr 1fr;}
-  .week-grid{grid-template-columns:repeat(4,1fr);}
-  .data-table thead th:nth-child(n+5),.data-table tbody td:nth-child(n+5){display:none;}
+  .col-hide-m{display:none;}
+  .data-table td,.data-table thead th{padding:9px 6px;}
+  .td-forn{max-width:120px;}
+  .td-date .badge{display:none;}
+  .xr-grid{grid-template-columns:1fr;}
 }
 @media(max-width:480px){
-  .stats-row{grid-template-columns:1fr 1fr;}
-  .week-grid{grid-template-columns:repeat(4,1fr);}
+  .week-grid{grid-template-columns:repeat(3,1fr);}
+  .stat-value{font-size:15px!important;}
 }
 </style>
 </head>
@@ -213,144 +258,179 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
 
   <main class="main-content">
 
+    {% macro qs(loja=filtro_loja, st=filtro_status, di=filtro_inicio, df=filtro_fim, q=filtro_busca) -%}
+      /dono?loja_id={{ loja }}&status={{ st }}&data_inicio={{ di }}&data_fim={{ df }}&busca={{ q | urlencode }}
+    {%- endmacro %}
+
     <!-- CABEÇALHO -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
       <div>
         <div class="page-eyebrow">Visão Consolidada · Semana {{ seg_iso | date_br }} – {{ dom_iso | date_br }}</div>
         <div class="page-title">Dashboard do Dono</div>
       </div>
-      <a href="/financeiro/exportar" class="btn btn-ghost btn-sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Exportar CSV
-      </a>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--txt-3);">A pagar no total: <b style="color:var(--txt-1);">{{ stats.total_pendente | currency }}</b> ({{ stats.qtd_pendente }})</span>
+        <a href="/financeiro/exportar?estabelecimento_id={{ filtro_loja }}&data_inicio={{ filtro_inicio }}&data_fim={{ filtro_fim }}" class="btn btn-ghost btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar CSV
+        </a>
+      </div>
     </div>
 
-    <!-- CARDS DE MÉTRICAS -->
+    <!-- CARDS DE INDICADORES -->
     <div class="stats-row">
-      <a href="/dono?status=vencidos" style="text-decoration:none;">
+      <a href="{{ qs(st='vencidos', di='', df='') }}" style="text-decoration:none;">
         <div class="stat-tile clickable {% if filtro_status == 'vencidos' %}active-filter{% endif %}" style="--accent-bar:var(--red);">
-          <div class="stat-label">Vencidos</div>
-          <div class="stat-value" style="font-size:16px;color:var(--red);">{{ stats.total_vencido | currency }}</div>
-          <div class="stat-sub">{{ stats.qtd_vencido }} boleto{{ 's' if stats.qtd_vencido != 1 }}</div>
+          <div class="stat-label">Total Vencido</div>
+          <div class="stat-value" style="font-size:18px;color:var(--red);">{{ stats.total_vencido | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_vencido }} boleto{{ 's' if stats.qtd_vencido != 1 }} em atraso</div>
         </div>
       </a>
-      <a href="/dono?status=hoje" style="text-decoration:none;">
-        <div class="stat-tile clickable {% if filtro_status == 'hoje' %}active-filter{% endif %}" style="--accent-bar:var(--amber);">
+      <a href="{{ qs(st='hoje', di='', df='') }}" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'hoje' %}active-filter{% endif %}" style="--accent-bar:#F97316;">
           <div class="stat-label">Vence Hoje</div>
-          <div class="stat-value" style="font-size:16px;color:var(--amber);">{{ stats.total_hoje | currency }}</div>
+          <div class="stat-value" style="font-size:18px;color:#F97316;">{{ stats.total_hoje | currency }}</div>
           <div class="stat-sub">{{ stats.qtd_hoje }} boleto{{ 's' if stats.qtd_hoje != 1 }}</div>
         </div>
       </a>
-      <a href="/dono?status=semana" style="text-decoration:none;">
-        <div class="stat-tile clickable {% if filtro_status == 'semana' %}active-filter{% endif %}" style="--accent-bar:var(--blue);">
-          <div class="stat-label">Total Semana</div>
-          <div class="stat-value" style="font-size:16px;">{{ stats.total_semana | currency }}</div>
-          <div class="stat-sub">{{ stats.qtd_semana }} boleto{{ 's' if stats.qtd_semana != 1 }}</div>
+      <a href="{{ qs(st='semana', di='', df='') }}" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'semana' %}active-filter{% endif %}" style="--accent-bar:var(--blue-hi);">
+          <div class="stat-label">A pagar na Semana</div>
+          <div class="stat-value" style="font-size:18px;color:var(--blue-hi);">{{ stats.total_semana | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_semana }} boleto{{ 's' if stats.qtd_semana != 1 }} · seg a dom</div>
         </div>
       </a>
-      <div class="stat-tile" style="--accent-bar:var(--emerald);">
-        <div class="stat-label">Pago no Mês</div>
-        <div class="stat-value" style="font-size:16px;color:var(--emerald);">{{ stats.total_pago_mes | currency }}</div>
-        <div class="stat-sub">{{ stats.qtd_pago_mes }} boleto{{ 's' if stats.qtd_pago_mes != 1 }}</div>
-      </div>
+      <a href="{{ qs(st='pagos_mes', di='', df='') }}" style="text-decoration:none;">
+        <div class="stat-tile clickable {% if filtro_status == 'pagos_mes' %}active-filter{% endif %}" style="--accent-bar:var(--emerald);">
+          <div class="stat-label">Pago no Mês</div>
+          <div class="stat-value" style="font-size:18px;color:var(--emerald);">{{ stats.total_pago_mes | currency }}</div>
+          <div class="stat-sub">{{ stats.qtd_pago_mes }} boleto{{ 's' if stats.qtd_pago_mes != 1 }}</div>
+        </div>
+      </a>
     </div>
 
     <!-- RESUMO POR LOJA -->
-    {% if resumo_lojas %}
     <div class="card" style="margin-bottom:20px;">
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Resumo por Loja</div>
-        <span style="font-size:11px;color:var(--txt-3);">pendentes · clique para filtrar</span>
+        <span style="font-size:11px;color:var(--txt-3);">saldo a pagar · clique para filtrar</span>
       </div>
       <div class="lojas-grid">
         {% for loja in resumo_lojas %}
-        <div class="loja-card {% if filtro_loja == loja.id|string %}active-loja{% endif %}"
-             onclick="filtrarLoja('{{ loja.id }}')">
+        <a class="loja-card {% if filtro_loja == loja.id|string %}active-loja{% endif %} {% if loja.qtd == 0 %}zerada{% endif %}"
+           href="{{ qs(loja='' if filtro_loja == loja.id|string else loja.id) }}" style="text-decoration:none;display:block;">
           <div class="loja-name" title="{{ loja.nome }}">{{ loja.nome }}</div>
           <div class="loja-valor">{{ loja.total | currency }}</div>
-          <div class="loja-qtd">{{ loja.qtd }} pendente{{ 's' if loja.qtd != 1 }}</div>
-        </div>
+          <div class="loja-qtd">{{ loja.qtd }} boleto{{ 's' if loja.qtd != 1 }} a pagar</div>
+          <div class="loja-meta">
+            {% if loja.qtd_vencido %}
+            <span class="loja-venc">{{ loja.qtd_vencido }} vencido{{ 's' if loja.qtd_vencido != 1 }}</span>
+            {% else %}<span>sem atrasos</span>{% endif %}
+            <span title="Pago no mês">✓ {{ loja.total_pago_mes | currency }}</span>
+          </div>
+        </a>
         {% endfor %}
-        {% if filtro_loja %}
-        <div class="loja-card" onclick="filtrarLoja('')"
-             style="display:flex;align-items:center;justify-content:center;color:var(--txt-3);font-size:12px;gap:6px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          Limpar filtro
-        </div>
-        {% endif %}
       </div>
     </div>
-    {% endif %}
 
     <!-- LOTE SEMANAL -->
     <div class="card" style="margin-bottom:20px;">
-      <div class="section-header" style="margin-bottom:14px;">
-        <div class="section-title">Lote Semanal</div>
-        <span style="font-size:11px;color:var(--txt-3);">Seg–Dom · clique no dia para filtrar</span>
+      <div class="section-header" style="margin-bottom:14px;flex-wrap:wrap;">
+        <div class="week-head">
+          <div class="section-title">Lote da Semana{% if filtro_loja_nome %} · {{ filtro_loja_nome }}{% endif %}</div>
+          <div class="week-tot">{{ semana_total.total | currency }}</div>
+          <div class="week-split">
+            a pagar <b style="color:var(--amber);">{{ semana_total.pendente | currency }}</b> ·
+            pago <b style="color:var(--emerald);">{{ semana_total.pago | currency }}</b>
+          </div>
+        </div>
+        <a href="{{ qs(st='', di=seg_iso, df=dom_iso) }}" class="btn btn-ghost btn-sm">Ver semana inteira</a>
       </div>
       <div class="week-grid">
         {% for dia in lote_semanal %}
-        <div class="day-card {% if dia.is_hoje %}today{% endif %} {% if dia.qtd > 0 %}has-boletos{% endif %}"
-             onclick="filtrarDia('{{ dia.dia_iso }}')" title="{{ dia.dia_iso }}">
-          <div class="day-name">{{ dia.dia_nome }}</div>
+        {% set selecionado = filtro_inicio == dia.dia_iso and filtro_fim == dia.dia_iso %}
+        <a class="day-card {% if dia.is_hoje %}today{% endif %} {% if dia.qtd_pendente > 0 %}has-boletos{% endif %} {% if dia.passado and not dia.is_hoje %}passado{% endif %} {% if selecionado %}sel{% endif %}"
+           href="{{ qs(st='', di='' if selecionado else dia.dia_iso, df='' if selecionado else dia.dia_iso) }}" style="text-decoration:none;display:block;">
+          <div class="day-name">{{ 'Hoje' if dia.is_hoje else dia.dia_nome }}</div>
+          <div class="day-date">{{ dia.dia_num }}</div>
           {% if dia.qtd > 0 %}
           <div class="day-total">{{ dia.total | currency }}</div>
           <div class="day-qtd">{{ dia.qtd }} boleto{{ 's' if dia.qtd != 1 }}</div>
+          {% if dia.qtd_pendente %}<div class="day-pend">a pagar {{ dia.total_pendente | currency }}</div>{% endif %}
+          {% if dia.qtd_pago %}<div class="day-pago">✓ pago {{ dia.total_pago | currency }}</div>{% endif %}
           {% else %}
-          <div class="day-total" style="color:var(--txt-3);font-size:10px;">—</div>
-          <div class="day-qtd">0</div>
+          <div class="day-total" style="color:var(--txt-3);font-size:11px;">—</div>
           {% endif %}
-        </div>
+        </a>
         {% endfor %}
       </div>
     </div>
 
     <!-- FILTROS -->
-    <form method="get" action="/dono" id="filtro-form" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:flex-end;">
-      <input type="hidden" name="loja_id" id="input-loja-id" value="{{ filtro_loja }}">
-      <input type="hidden" name="data_inicio" id="input-data-inicio" value="{{ filtro_inicio }}">
-      <input type="hidden" name="data_fim" id="input-data-fim" value="{{ filtro_fim }}">
-      <div class="form-group" style="min-width:120px;">
-        <label class="form-label">Status</label>
-        <select class="form-control" name="status" onchange="this.form.submit()">
-          <option value="">Todos</option>
-          <option value="vencidos" {% if filtro_status == 'vencidos' %}selected{% endif %}>Vencidos</option>
-          <option value="hoje" {% if filtro_status == 'hoje' %}selected{% endif %}>Vence Hoje</option>
-          <option value="semana" {% if filtro_status == 'semana' %}selected{% endif %}>Esta Semana</option>
-          {% for s in statuses %}
-          <option value="{{ s }}" {% if filtro_status == s %}selected{% endif %}>{{ s }}</option>
+    <form method="get" action="/dono" id="filtro-form" class="card" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:flex-end;padding:14px;">
+      <div class="form-group" style="min-width:150px;flex:1;">
+        <label class="form-label" for="f-loja">Loja</label>
+        <select class="form-control" id="f-loja" name="loja_id" onchange="this.form.submit()">
+          <option value="">Todas as lojas</option>
+          {% for e in estabelecimentos %}
+          <option value="{{ e.id }}" {% if filtro_loja == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-group" style="flex:1;min-width:160px;">
-        <label class="form-label">Buscar fornecedor / loja</label>
-        <input class="form-control" type="text" name="busca" value="{{ filtro_busca }}" placeholder="Nome do arquivo ou loja…">
+      <div class="form-group" style="min-width:150px;flex:1;">
+        <label class="form-label" for="f-status">Status</label>
+        <select class="form-control" id="f-status" name="status" onchange="this.form.submit()">
+          {% for val, rotulo in status_opcoes.items() %}
+          <option value="{{ val }}" {% if filtro_status == val %}selected{% endif %}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
       </div>
-      <button type="submit" class="btn btn-ghost">
+      <div class="form-group" style="min-width:130px;">
+        <label class="form-label" for="f-di">Vence de</label>
+        <input class="form-control" id="f-di" type="date" name="data_inicio" value="{{ filtro_inicio }}">
+      </div>
+      <div class="form-group" style="min-width:130px;">
+        <label class="form-label" for="f-df">até</label>
+        <input class="form-control" id="f-df" type="date" name="data_fim" value="{{ filtro_fim }}">
+      </div>
+      <div class="form-group" style="flex:2;min-width:180px;">
+        <label class="form-label" for="f-busca">Buscar fornecedor</label>
+        <input class="form-control" id="f-busca" type="search" name="busca" value="{{ filtro_busca }}" placeholder="Fornecedor, arquivo, loja ou código…">
+      </div>
+      <button type="submit" class="btn btn-primary" style="height:36px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         Filtrar
       </button>
-      <a href="/dono" class="btn btn-ghost" style="opacity:.6;">Limpar</a>
+      {% if filtros_ativos %}<a href="/dono" class="btn btn-ghost" style="height:36px;">Limpar</a>{% endif %}
     </form>
 
-    <!-- TABELA PRINCIPAL -->
+    {% if filtros_ativos %}
+    <div class="chips">
+      {% if filtro_loja_nome %}<span class="chip">Loja: {{ filtro_loja_nome }} <a href="{{ qs(loja='') }}" title="Remover">✕</a></span>{% endif %}
+      {% if filtro_status %}<span class="chip">{{ status_opcoes[filtro_status] }} <a href="{{ qs(st='') }}" title="Remover">✕</a></span>{% endif %}
+      {% if filtro_inicio or filtro_fim %}<span class="chip">Vencimento: {{ filtro_inicio | date_br if filtro_inicio else '…' }} – {{ filtro_fim | date_br if filtro_fim else '…' }} <a href="{{ qs(di='', df='') }}" title="Remover">✕</a></span>{% endif %}
+      {% if filtro_busca %}<span class="chip">“{{ filtro_busca }}” <a href="{{ qs(q='') }}" title="Remover">✕</a></span>{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- LISTAGEM -->
     <div class="card">
       <div class="section-header" style="margin-bottom:14px;">
         <div class="section-title">Boletos</div>
-        <span class="badge badge-em-lote" style="font-size:9px;">{{ boletos | length }} resultado{{ 's' if boletos | length != 1 }} · R$ {{ stats.total_filtro | currency }}</span>
+        <span class="badge badge-em-lote" style="font-size:9px;">{{ stats.qtd_filtro }} resultado{{ 's' if stats.qtd_filtro != 1 }} · {{ stats.total_filtro | currency }}</span>
       </div>
       {% if boletos %}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Loja</th>
-              <th>Fornecedor / Arquivo</th>
+              <th>Fornecedor</th>
               <th>Valor</th>
               <th>Vencimento</th>
               <th>Status</th>
-              <th>Linha Digitável</th>
-              <th>Ações</th>
+              <th class="col-hide-m">Lançado por</th>
+              <th class="col-hide-m">Linha Digitável</th>
+              <th class="col-hide-m"></th>
             </tr>
           </thead>
           <tbody>
@@ -360,12 +440,12 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
             {% if b.status != 'Pago' %}
               {% if venc < hoje %}{% set vb = 'vencido' %}{% set vl = 'Vencido' %}
               {% elif venc == hoje %}{% set vb = 'vence-hoje' %}{% set vl = 'Hoje' %}
-              {% else %}{% set vb = 'no-prazo' %}{% set vl = '' %}{% endif %}
+              {% else %}{% set vb = '' %}{% set vl = '' %}{% endif %}
             {% else %}{% set vb = '' %}{% set vl = '' %}{% endif %}
-            <tr onclick="abrirModal({{ b.id }})" data-id="{{ b.id }}">
-              <td style="font-weight:600;white-space:nowrap;">{{ b.estabelecimento }}</td>
-              <td style="font-size:12px;color:var(--txt-2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                {{ b.arquivo_nome or (b.arquivo_url.split('/')[-1] if b.arquivo_url else '') or '—' }}
+            <tr onclick="abrirModal({{ b.id }})" data-id="{{ b.id }}" tabindex="0" onkeydown="if(event.key==='Enter')abrirModal({{ b.id }})">
+              <td class="td-forn">
+                {{ b.fornecedor or b.arquivo_nome or 'Sem fornecedor' }}
+                <div class="td-sub">{{ b.estabelecimento }}</div>
               </td>
               <td class="td-value">{{ b.valor | currency }}</td>
               <td class="td-date">
@@ -373,37 +453,33 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
                 {% if vb %}<span class="badge badge-{{ vb }}" style="font-size:9px;margin-left:4px;">{{ vl }}</span>{% endif %}
               </td>
               <td><span class="badge badge-{{ sc }}">{{ b.status }}</span></td>
-              <td style="min-width:130px;" onclick="event.stopPropagation()">
+              <td class="col-hide-m" style="font-size:12px;color:var(--txt-2);">{{ b.criado_por or '—' }}</td>
+              <td class="col-hide-m" style="min-width:130px;" onclick="event.stopPropagation()">
                 {% if b.linha_digitavel %}
-                <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                  <span style="font-size:10px;color:var(--txt-2);font-family:monospace;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b.linha_digitavel }}">{{ b.linha_digitavel[:22] }}{% if b.linha_digitavel|length > 22 %}…{% endif %}</span>
-                  <button class="copy-btn" onclick="copiarCodigo(this,'{{ b.linha_digitavel|replace("'","\\'") }}')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                    Copiar
-                  </button>
-                  <span class="copy-ok">✓</span>
-                </div>
+                <button class="copy-btn" data-codigo="{{ b.linha_digitavel }}" onclick="copiarCodigo(this)" title="{{ b.linha_digitavel }}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  <span>Copiar código</span>
+                </button>
                 {% else %}
                 <span style="font-size:11px;color:var(--txt-3);">—</span>
                 {% endif %}
               </td>
-              <td onclick="event.stopPropagation()">
-                <div style="display:flex;gap:6px;align-items:center;">
-                  <button class="btn btn-ghost btn-sm" onclick="abrirModal({{ b.id }})">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                    Detalhes
-                  </button>
-                  {% if b.arquivo_url %}
-                  <a href="{{ b.arquivo_url }}" target="_blank" class="btn btn-ghost btn-sm" title="Ver PDF">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  </a>
-                  {% endif %}
-                </div>
+              <td class="col-hide-m" onclick="event.stopPropagation()">
+                {% if b.arquivo_url %}
+                <a href="{{ b.arquivo_url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" title="Abrir PDF">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  PDF
+                </a>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="tbl-foot">
+        <span>{{ stats.qtd_filtro }} boleto{{ 's' if stats.qtd_filtro != 1 }}</span>
+        <span>Total: <b>{{ stats.total_filtro | currency }}</b></span>
       </div>
       {% else %}
       <div style="text-align:center;padding:48px 20px;color:var(--txt-3);">
@@ -417,172 +493,201 @@ table.data-table{width:100%;border-collapse:collapse;font-size:13px;}
   </main>
 </div>
 
-<!-- MODAL DE DETALHES -->
+<!-- MODAL RAIO-X DO BOLETO -->
 <div id="modal-backdrop" class="modal-backdrop" hidden onclick="fecharModal()">
-  <div class="modal-box" onclick="event.stopPropagation()">
-    <button class="modal-close" onclick="fecharModal()">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="m-valor" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="fecharModal()" aria-label="Fechar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
-    <div class="modal-title" id="modal-title">Detalhes do Boleto</div>
 
-    <div id="modal-body">
-      <div class="detail-row"><span class="detail-label">Loja</span><span class="detail-val" id="m-loja">—</span></div>
-      <div class="detail-row"><span class="detail-label">Fornecedor</span><span class="detail-val" id="m-fornecedor">—</span></div>
-      <div class="detail-row"><span class="detail-label">Valor</span><span class="detail-val" id="m-valor">—</span></div>
-      <div class="detail-row"><span class="detail-label">Cadastrado em</span><span class="detail-val" id="m-envio">—</span></div>
-      <div class="detail-row"><span class="detail-label">Vencimento</span><span class="detail-val" id="m-venc">—</span></div>
-      <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val" id="m-status">—</span></div>
-      <div id="m-pago-row" class="detail-row" hidden>
-        <span class="detail-label">Pago por</span>
-        <span class="detail-val" id="m-pago">—</span>
+    <div class="page-eyebrow" id="m-id">Boleto</div>
+    <div class="xr-head">
+      <div>
+        <div class="xr-valor" id="m-valor">—</div>
+        <div class="xr-forn" id="m-fornecedor">—</div>
       </div>
+      <span class="badge" id="m-status-badge">—</span>
+    </div>
 
-      <div id="m-barcode-section" hidden>
-        <hr class="divider" style="margin:14px 0;">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);margin-bottom:6px;">Linha Digitável</div>
-        <div class="barcode-box" id="m-barcode">—</div>
-        <button class="btn-copy-big" id="m-copy-btn" onclick="copiarBarcode()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          Copiar Código de Barras
-        </button>
-      </div>
+    <div class="xr-grid">
+      <div class="xr-item"><span class="detail-label">Vencimento</span><span class="detail-val" id="m-venc">—</span></div>
+      <div class="xr-item"><span class="detail-label">Loja de origem</span><span class="detail-val" id="m-loja">—</span></div>
+      <div class="xr-item"><span class="detail-label">Lançado por</span><span class="detail-val" id="m-criado">—</span></div>
+      <div class="xr-item"><span class="detail-label">Lançado em</span><span class="detail-val" id="m-envio">—</span></div>
+      <div class="xr-item xr-full"><span class="detail-label">Arquivo</span><span class="detail-val" id="m-arquivo" style="font-size:12px;color:var(--txt-2);word-break:break-all;">—</span></div>
+    </div>
 
+    <div id="m-pago-box" class="xr-pago" hidden></div>
+    <div id="m-alerta-box" class="xr-alerta" hidden></div>
+
+    <div id="m-barcode-section" hidden>
       <hr class="divider" style="margin:14px 0;">
-      <a id="m-pdf-link" href="#" target="_blank" class="btn btn-ghost" style="width:100%;justify-content:center;" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Visualizar / Baixar PDF
-      </a>
+      <div class="detail-label" style="margin-bottom:6px;">Linha Digitável</div>
+      <div class="barcode-box" id="m-barcode">—</div>
+      <button class="btn-copy-big" id="m-copy-btn" onclick="copiarBarcode()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        <span>Copiar Linha Digitável</span>
+      </button>
+    </div>
+    <div id="m-sem-codigo" class="td-sub" style="margin-top:14px;" hidden>Linha digitável não cadastrada para este boleto.</div>
+
+    <div id="m-pdf-section" hidden>
+      <hr class="divider" style="margin:14px 0;">
+      <div class="xr-acoes">
+        <a id="m-pdf-link" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-lg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Abrir PDF
+        </a>
+        <a id="m-pdf-download" href="#" class="btn btn-ghost btn-lg" download>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Baixar PDF
+        </a>
+      </div>
     </div>
   </div>
 </div>
 
 <div id="toast-container"></div>
 
-<!-- DADOS DOS BOLETOS PARA O MODAL (JSON embutido) -->
+<!-- DADOS DOS BOLETOS PARA O MODAL -->
 <script id="boletos-data" type="application/json">
 [
 {% for b in boletos %}
-{
-  "id": {{ b.id }},
-  "estabelecimento": {{ b.estabelecimento | tojson }},
-  "arquivo_nome": {{ (b.arquivo_nome or '') | tojson }},
-  "valor": {{ b.valor }},
-  "data_envio": {{ (b.data_envio or '') | tojson }},
-  "data_vencimento": {{ b.data_vencimento | tojson }},
-  "status": {{ b.status | tojson }},
-  "linha_digitavel": {{ (b.linha_digitavel or '') | tojson }},
-  "pago_em": {{ (b.pago_em or '') | tojson }},
-  "pago_por": {{ (b.pago_por or '') | tojson }},
-  "arquivo_url": {{ (b.arquivo_url or '') | tojson }}
-}{% if not loop.last %},{% endif %}
+{"id": {{ b.id }}, "estabelecimento": {{ (b.estabelecimento or '') | tojson }}, "fornecedor": {{ (b.fornecedor or '') | tojson }}, "arquivo_nome": {{ (b.arquivo_nome or '') | tojson }}, "valor": {{ b.valor | float }}, "data_envio": {{ (b.data_envio or '') | tojson }}, "data_vencimento": {{ (b.data_vencimento or '') | tojson }}, "status": {{ (b.status or '') | tojson }}, "linha_digitavel": {{ (b.linha_digitavel or '') | tojson }}, "pago_em": {{ (b.pago_em or '') | tojson }}, "pago_por": {{ (b.pago_por or '') | tojson }}, "criado_por": {{ (b.criado_por or '') | tojson }}, "arquivo_url": {{ (b.arquivo_url or '') | tojson }}}{% if not loop.last %},{% endif %}
 {% endfor %}
 ]
 </script>
 
 <script>
-// --- Dados ---
+var HOJE = {{ hoje | tojson }};
 var BOLETOS = JSON.parse(document.getElementById('boletos-data').textContent);
 var boletoMap = {};
 BOLETOS.forEach(function(b){ boletoMap[b.id] = b; });
 
+function $(id){ return document.getElementById(id); }
+function brl(v){ return (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function formatarData(iso){
+  if (!iso) return '—';
+  var p = iso.slice(0,10).split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+}
+function formatarDataHora(iso){
+  if (!iso) return '—';
+  var hora = iso.length > 10 ? iso.replace('T',' ').slice(11,16) : '';
+  return formatarData(iso) + (hora ? ' às ' + hora : '');
+}
+function diasEntre(a, b){ return Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00')) / 86400000); }
+function urlDownload(url){
+  // Supabase Storage força download com ?download=
+  if (url.indexOf('/storage/v1/object/public/') !== -1) return url + (url.indexOf('?') === -1 ? '?' : '&') + 'download=';
+  return url;
+}
+
 // --- Modal ---
-function abrirModal(id) {
+var ultimoFoco = null;
+function abrirModal(id){
   var b = boletoMap[id];
   if (!b) return;
-  document.getElementById('modal-title').textContent = 'Boleto #' + id;
-  document.getElementById('m-loja').textContent = b.estabelecimento || '—';
-  document.getElementById('m-fornecedor').textContent = b.arquivo_nome || '—';
-  document.getElementById('m-valor').textContent = 'R$ ' + parseFloat(b.valor).toLocaleString('pt-BR',{minimumFractionDigits:2});
-  document.getElementById('m-envio').textContent = formatarData(b.data_envio);
-  document.getElementById('m-venc').textContent = formatarData(b.data_vencimento);
-  document.getElementById('m-status').textContent = b.status;
-  var pagoRow = document.getElementById('m-pago-row');
-  if (b.pago_por) {
-    pagoRow.hidden = false;
-    var txt = b.pago_por;
-    if (b.pago_em) txt += ' em ' + b.pago_em.replace('T',' ').slice(0,16);
-    document.getElementById('m-pago').textContent = txt;
-  } else { pagoRow.hidden = true; }
-  var barcodeSection = document.getElementById('m-barcode-section');
-  if (b.linha_digitavel) {
-    barcodeSection.hidden = false;
-    document.getElementById('m-barcode').textContent = b.linha_digitavel;
-  } else { barcodeSection.hidden = true; }
-  var pdfLink = document.getElementById('m-pdf-link');
+  ultimoFoco = document.activeElement;
+  $('m-id').textContent = 'Boleto #' + b.id;
+  $('m-valor').textContent = brl(b.valor);
+  $('m-fornecedor').textContent = b.fornecedor || 'Fornecedor não informado';
+  var badge = $('m-status-badge');
+  badge.textContent = b.status;
+  badge.className = 'badge badge-' + b.status.toLowerCase().replace(/ /g,'-');
+  $('m-venc').textContent = formatarData(b.data_vencimento);
+  $('m-loja').textContent = b.estabelecimento || '—';
+  $('m-criado').textContent = b.criado_por || 'Não registrado';
+  $('m-envio').textContent = formatarData(b.data_envio);
+  $('m-arquivo').textContent = b.arquivo_nome || '—';
+
+  var pagoBox = $('m-pago-box'), alerta = $('m-alerta-box');
+  pagoBox.hidden = true; alerta.hidden = true;
+  if (b.status === 'Pago') {
+    pagoBox.hidden = false;
+    pagoBox.textContent = '✓ Baixa dada por ' + (b.pago_por || '—') + ' em ' + formatarDataHora(b.pago_em);
+  } else if (b.data_vencimento && b.data_vencimento < HOJE) {
+    var d = diasEntre(b.data_vencimento, HOJE);
+    alerta.hidden = false;
+    alerta.textContent = '⚠ Vencido há ' + d + ' dia' + (d !== 1 ? 's' : '') + ' — ainda sem baixa.';
+  } else if (b.data_vencimento === HOJE) {
+    alerta.hidden = false;
+    alerta.textContent = '⚠ Vence hoje.';
+  }
+
+  var temCodigo = !!b.linha_digitavel;
+  $('m-barcode-section').hidden = !temCodigo;
+  $('m-sem-codigo').hidden = temCodigo;
+  if (temCodigo) $('m-barcode').textContent = b.linha_digitavel;
+  resetCopyBtn();
+
+  $('m-pdf-section').hidden = !b.arquivo_url;
   if (b.arquivo_url) {
-    pdfLink.hidden = false;
-    pdfLink.href = b.arquivo_url;
-  } else { pdfLink.hidden = true; }
-  document.getElementById('modal-backdrop').hidden = false;
+    $('m-pdf-link').href = b.arquivo_url;
+    $('m-pdf-download').href = urlDownload(b.arquivo_url);
+  }
+  $('modal-backdrop').hidden = false;
   document.body.style.overflow = 'hidden';
+  $('modal-backdrop').querySelector('.modal-close').focus();
 }
 
-function fecharModal() {
-  document.getElementById('modal-backdrop').hidden = true;
+function fecharModal(){
+  $('modal-backdrop').hidden = true;
   document.body.style.overflow = '';
+  if (ultimoFoco && ultimoFoco.focus) ultimoFoco.focus();
 }
-
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') fecharModal(); });
 
-function formatarData(iso) {
-  if (!iso) return '—';
-  var parts = iso.slice(0,10).split('-');
-  return parts[2] + '/' + parts[1] + '/' + parts[0];
+// --- Copiar ---
+function copiarTexto(txt){
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(txt);
+  return new Promise(function(ok, falha){
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy') ? ok() : falha(); } catch(e){ falha(e); }
+    document.body.removeChild(ta);
+  });
 }
-
-function copiarBarcode() {
-  var code = document.getElementById('m-barcode').textContent.trim();
-  var btn = document.getElementById('m-copy-btn');
-  navigator.clipboard.writeText(code).then(function(){
-    btn.textContent = '✓ Copiado!';
-    setTimeout(function(){ btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar Código de Barras'; }, 2000);
+function resetCopyBtn(){
+  var btn = $('m-copy-btn');
+  btn.classList.remove('ok');
+  btn.querySelector('span').textContent = 'Copiar Linha Digitável';
+}
+function copiarBarcode(){
+  var code = $('m-barcode').textContent.trim();
+  var btn = $('m-copy-btn');
+  copiarTexto(code).then(function(){
+    btn.classList.add('ok');
+    btn.querySelector('span').textContent = 'Copiado!';
+    toast('Linha digitável copiada');
+    setTimeout(resetCopyBtn, 2000);
+  }).catch(function(){ prompt('Copie o código:', code); });
+}
+function copiarCodigo(btn){
+  var code = btn.getAttribute('data-codigo');
+  copiarTexto(code).then(function(){
+    var s = btn.querySelector('span'); s.textContent = '✓ Copiado';
+    setTimeout(function(){ s.textContent = 'Copiar código'; }, 2000);
   }).catch(function(){ prompt('Copie o código:', code); });
 }
 
-// --- Copiar código inline na tabela ---
-function copiarCodigo(btn, codigo) {
-  navigator.clipboard.writeText(codigo).then(function() {
-    var row = btn.parentElement;
-    var ok = row.querySelector('.copy-ok');
-    btn.style.display = 'none';
-    ok.style.display = 'inline';
-    setTimeout(function() { btn.style.display = ''; ok.style.display = 'none'; }, 2000);
-  }).catch(function() { prompt('Copie o código:', codigo); });
-}
-
-// --- Filtrar por loja (card resumo) ---
-function filtrarLoja(id) {
-  document.getElementById('input-loja-id').value = id;
-  document.getElementById('input-data-inicio').value = '';
-  document.getElementById('input-data-fim').value = '';
-  document.getElementById('filtro-form').submit();
-}
-
-// --- Filtrar por dia do lote semanal ---
-function filtrarDia(iso) {
-  document.getElementById('input-loja-id').value = '';
-  document.getElementById('input-data-inicio').value = iso;
-  document.getElementById('input-data-fim').value = iso;
-  document.getElementById('filtro-form').submit();
-}
-
 // --- Toast ---
+function toast(msg){
+  var container = $('toast-container');
+  var el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+  el.appendChild(document.createTextNode(msg));
+  container.appendChild(el);
+  requestAnimationFrame(function(){ el.classList.add('toast--visible'); });
+  setTimeout(function(){ el.classList.remove('toast--visible'); setTimeout(function(){ el.remove(); }, 300); }, 2500);
+}
 (function(){
   var params = new URLSearchParams(window.location.search);
   var msg = params.get('msg');
   if (!msg) return;
-  var container = document.getElementById('toast-container');
-  var el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = '<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' + document.createTextNode(msg).textContent;
-  container.appendChild(el);
-  requestAnimationFrame(function(){ el.classList.add('toast--visible'); });
-  setTimeout(function(){
-    el.style.transition = 'opacity .4s,transform .4s';
-    el.style.opacity = '0';
-    el.style.transform = 'translateY(12px)';
-    setTimeout(function(){ el.remove(); }, 400);
-  }, 3500);
+  toast(msg);
   var url = new URL(window.location.href);
   url.searchParams.delete('msg');
   history.replaceState(null, '', url.toString());

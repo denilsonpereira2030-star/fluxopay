@@ -9,7 +9,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -24,6 +25,12 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 db.init_db()
+
+# Dev local sem Supabase: serve os arquivos salvos em ./uploads
+if not db.supabase:
+    _UPLOADS_DIR = Path(db.BASE_DIR) / "uploads"
+    _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
 
 
 # ── session helpers ──────────────────────────────────────────────────────────
@@ -166,6 +173,7 @@ def gerente_salvar_boleto(
     data_vencimento: str = Form(...),
     arquivo: UploadFile = File(None),
     confirmar_duplicata: str = Form(""),
+    fornecedor: str = Form(""),
 ):
     user = _require_user(request)
     if user["perfil"] != "gerente":
@@ -181,6 +189,7 @@ def gerente_salvar_boleto(
                 request, "gerente_novo.html", user=user, est_nome=est_nome,
                 hoje=date.today(),
                 duplicata_aviso=dup,
+                dup_fornecedor=fornecedor,
                 dup_valor=valor,
                 dup_vencimento=data_vencimento,
                 status_code=200,
@@ -208,29 +217,43 @@ def gerente_salvar_boleto(
         # Tenta extrair linha digitável antes de liberar os dados do PDF
         linha_digitavel = pdf_service.extrair_linha_digitavel(dados)
 
+        # Chave única e só-ASCII: <loja>/<AAAA-MM>/<uuid>_<nome>.pdf
+        # (evita colisão de "boleto.pdf" e o "Invalid key" com acentos).
+        caminho = pdf_service.chave_storage(user["estabelecimento_id"], nome)
         if db.supabase:
-            caminho = f"{user['estabelecimento_id']}/{uuid.uuid4()}_{nome}"
-            try:
-                db.supabase.storage.from_(db.SUPABASE_BUCKET).upload(
-                    path=caminho,
-                    file=dados,
-                    file_options={"content-type": tipo, "upsert": "true"},
-                )
-            except Exception as storage_exc:
-                print(f"[upload] StorageApiError detalhado: {storage_exc!r}", flush=True)
-                raise
-            arquivo_url = db.supabase.storage.from_(db.SUPABASE_BUCKET).get_public_url(caminho)
+            bucket = db.supabase.storage.from_(db.SUPABASE_BUCKET)
+            ultimo_erro = None
+            for _tentativa in range(2):
+                try:
+                    bucket.upload(
+                        path=caminho,
+                        file=dados,
+                        file_options={"content-type": tipo, "upsert": "false"},
+                    )
+                    ultimo_erro = None
+                    break
+                except Exception as storage_exc:
+                    ultimo_erro = storage_exc
+                    print(f"[upload] StorageApiError ({caminho}): {storage_exc!r}", flush=True)
+                    # gera nova chave e tenta mais uma vez (colisão/erro transitório)
+                    caminho = pdf_service.chave_storage(user["estabelecimento_id"], nome)
+            if ultimo_erro is not None:
+                raise ultimo_erro
+            arquivo_url = bucket.get_public_url(caminho)
         else:
             # fallback local: salva em disco para dev
-            dest = Path(db.BASE_DIR) / "uploads" / nome
+            dest = Path(db.BASE_DIR) / "uploads" / caminho
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(dados)
-            arquivo_url = f"/uploads/{nome}"
+            arquivo_url = f"/uploads/{caminho}"
 
         del dados
         gc.collect()
 
-        db.salvar_boleto(user["estabelecimento_id"], nome, arquivo_url, valor, vencimento, linha_digitavel)
+        db.salvar_boleto(
+            user["estabelecimento_id"], nome, arquivo_url, valor, vencimento, linha_digitavel,
+            fornecedor=fornecedor[:120], criado_por=user["login"],
+        )
     except Exception as exc:
         print(f"ERRO FATAL NO UPLOAD: {str(exc)}", flush=True)
         return _tpl(
@@ -264,12 +287,12 @@ async def gerente_editar_form(boleto_id: int, request: Request):
 
 
 @app.post("/gerente/boleto/{boleto_id}/editar")
-async def gerente_editar_post(boleto_id: int, request: Request, valor: float = Form(...), data_vencimento: str = Form(...)):
+async def gerente_editar_post(boleto_id: int, request: Request, valor: float = Form(...), data_vencimento: str = Form(...), fornecedor: str = Form("")):
     user = _require_user(request)
     boleto = db.get_boleto_by_id(boleto_id)
     if not boleto or boleto["estabelecimento_id"] != user["estabelecimento_id"] or boleto["status"] != "Pendente":
         raise HTTPException(403)
-    db.atualizar_boleto(boleto_id, valor=valor, data_vencimento=date.fromisoformat(data_vencimento))
+    db.atualizar_boleto(boleto_id, valor=valor, data_vencimento=date.fromisoformat(data_vencimento), fornecedor=fornecedor[:120])
     return RedirectResponse("/gerente/contas?msg=Boleto+atualizado+com+sucesso%21", status_code=303)
 
 
@@ -373,54 +396,54 @@ async def financeiro_excluir(boleto_id: int, request: Request, origem: str = For
 
 # ── PDF DOWNLOADS ─────────────────────────────────────────────────────────────
 
+def _apagar_temp(caminho: str) -> None:
+    try:
+        os.unlink(caminho)
+    except OSError:
+        pass
+    gc.collect()
+
+
+def _pdf_temporario(caminho: str, filename: str) -> FileResponse:
+    """Serve o PDF direto do disco (sem cópia em RAM) e apaga após o envio."""
+    return FileResponse(
+        caminho,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={filename}"},
+        background=BackgroundTask(_apagar_temp, caminho),
+    )
+
+
 @app.get("/financeiro/pdf/lote")
-async def download_lote(request: Request, marcar_em_lote: str = "1"):
+def download_lote(request: Request, marcar_em_lote: str = "1"):
     user = _get_user(request)
     if not user or user["perfil"] != "financeiro":
         raise HTTPException(403)
-    pdf_bytes = None
-    try:
-        rows = db.listar_boletos_do_lote()
-        if not rows:
-            raise HTTPException(404, "Nenhum boleto no lote atual.")
-        if marcar_em_lote == "1":
-            db.marcar_lote_em_lote([r["id"] for r in rows])
-        pdf_bytes = pdf_service.gerar_lote_impressao_bytes(rows)
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={"Content-Disposition": "inline; filename=lote_impressao.pdf"},
-        )
-    finally:
-        del pdf_bytes
-        gc.collect()
+    rows = db.listar_boletos_do_lote()
+    if not rows:
+        raise HTTPException(404, "Nenhum boleto no lote atual.")
+    caminho = pdf_service.gerar_lote_impressao_arquivo(rows)
+    if marcar_em_lote == "1":
+        db.marcar_lote_em_lote([r["id"] for r in rows])
+    return _pdf_temporario(caminho, "lote_impressao.pdf")
 
 
 @app.get("/financeiro/pdf/lote/pedro")
-async def download_lote_pedro(request: Request, marcar_em_lote: str = "1"):
+def download_lote_pedro(request: Request, marcar_em_lote: str = "1"):
     """Atalho rápido: gera o lote da semana atual (mesmo que /pdf/lote)."""
-    return await download_lote(request, marcar_em_lote=marcar_em_lote)
+    return download_lote(request, marcar_em_lote=marcar_em_lote)
 
 
 @app.get("/financeiro/pdf/urgentes")
-async def download_urgentes(request: Request):
+def download_urgentes(request: Request):
     user = _get_user(request)
     if not user or user["perfil"] != "financeiro":
         raise HTTPException(403)
-    pdf_bytes = None
-    try:
-        rows = db.listar_boletos_urgentes_hoje()
-        if not rows:
-            raise HTTPException(404, "Nenhum boleto urgente hoje.")
-        pdf_bytes = pdf_service.gerar_pdf_urgentes_bytes(rows)
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={"Content-Disposition": "inline; filename=boletos_urgentes_hoje.pdf"},
-        )
-    finally:
-        del pdf_bytes
-        gc.collect()
+    rows = db.listar_boletos_urgentes_hoje()
+    if not rows:
+        raise HTTPException(404, "Nenhum boleto urgente hoje.")
+    caminho = pdf_service.gerar_lote_impressao_arquivo(rows)
+    return _pdf_temporario(caminho, "boletos_urgentes_hoje.pdf")
 
 
 # ── ARQUIVO DE BOLETO (visualização inline) ───────────────────────────────────
@@ -514,6 +537,24 @@ async def financeiro_exportar(
 
 # ── DONO VIEWS ────────────────────────────────────────────────────────────────
 
+_DONO_STATUS = {
+    "": "Todos",
+    "vencidos": "Vencidos",
+    "hoje": "Vence Hoje",
+    "semana": "Semana Atual",
+    "pendentes": "A pagar (todos)",
+    "pagos": "Pagos",
+    "pagos_mes": "Pagos no Mês",
+}
+
+
+def _valor(b: dict) -> float:
+    try:
+        return float(b.get("valor") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 @app.get("/dono", response_class=HTMLResponse)
 async def dono_dashboard(
     request: Request,
@@ -525,111 +566,142 @@ async def dono_dashboard(
 ):
     user = _require_dono(request)
     hoje = date.today()
+    hoje_iso = hoje.isoformat()
+    mes_iso = hoje_iso[:7]
 
     # semana atual: segunda a domingo
     seg = hoje - timedelta(days=hoje.weekday())
     dom = seg + timedelta(days=6)
+    seg_iso, dom_iso = seg.isoformat(), dom.isoformat()
 
-    # filtros da tabela principal
+    if status not in _DONO_STATUS:
+        status = ""
     est_id = int(loja_id) if loja_id.isdigit() else None
-    di = date.fromisoformat(data_inicio) if data_inicio else None
-    df = date.fromisoformat(data_fim) if data_fim else None
+    try:
+        di = date.fromisoformat(data_inicio).isoformat() if data_inicio else ""
+        df = date.fromisoformat(data_fim).isoformat() if data_fim else ""
+    except ValueError:
+        di = df = ""
 
-    status_map = {
-        "vencidos": None,  # tratado abaixo
-        "hoje": None,
-        "semana": None,
-        "todos": None,
-        "": None,
-    }
-    status_db = status if status not in ("vencidos", "hoje", "semana", "todos", "") else None
+    # Uma única consulta; o resto é calculado em memória (volume pequeno).
+    todos = db.listar_boletos()
 
-    todos = db.listar_boletos(estabelecimento_id=est_id, status=status_db, data_inicio=di, data_fim=df)
+    def a_pagar(b): return b["status"] != "Pago"
+    def pago_no_mes(b): return b["status"] == "Pago" and (b.get("pago_em") or "")[:7] == mes_iso
 
-    # filtro de busca por nome do arquivo/fornecedor
-    busca_lower = busca.strip().lower()
-    if busca_lower:
-        todos = [b for b in todos if busca_lower in (b.get("arquivo_nome") or "").lower()
-                 or busca_lower in (b.get("estabelecimento") or "").lower()]
-
-    # filtro por atalho de status
-    if status == "vencidos":
-        boletos = [b for b in todos if b["status"] not in ("Pago",) and b["data_vencimento"] < hoje.isoformat()]
-    elif status == "hoje":
-        boletos = [b for b in todos if b["data_vencimento"] == hoje.isoformat()]
-    elif status == "semana":
-        boletos = [b for b in todos if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
-    else:
-        boletos = todos
-
-    # métricas consolidadas (sem filtro de loja/busca para os cards)
-    todos_sem_filtro = db.listar_boletos()
-    mes_inicio = date(hoje.year, hoje.month, 1)
-    pagos_mes = [b for b in todos_sem_filtro if b["status"] == "Pago"
-                 and b.get("pago_em", "") and b["pago_em"][:7] == hoje.isoformat()[:7]]
-
-    pendentes_geral = [b for b in todos_sem_filtro if b["status"] not in ("Pago",)]
-    vencidos_geral  = [b for b in pendentes_geral if b["data_vencimento"] < hoje.isoformat()]
-    hoje_geral      = [b for b in pendentes_geral if b["data_vencimento"] == hoje.isoformat()]
-    semana_geral    = [b for b in pendentes_geral if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
+    # ── cards (visão consolidada, sem filtros) ─────────────────────────────
+    pend = [b for b in todos if a_pagar(b)]
+    vencidos = [b for b in pend if b["data_vencimento"] < hoje_iso]
+    vence_hoje = [b for b in pend if b["data_vencimento"] == hoje_iso]
+    semana_pend = [b for b in pend if seg_iso <= b["data_vencimento"] <= dom_iso]
+    pagos_mes = [b for b in todos if pago_no_mes(b)]
 
     stats = {
-        "total_vencido":   sum(float(b["valor"]) for b in vencidos_geral),
-        "qtd_vencido":     len(vencidos_geral),
-        "total_hoje":      sum(float(b["valor"]) for b in hoje_geral),
-        "qtd_hoje":        len(hoje_geral),
-        "total_semana":    sum(float(b["valor"]) for b in semana_geral),
-        "qtd_semana":      len(semana_geral),
-        "total_pago_mes":  sum(float(b["valor"]) for b in pagos_mes),
-        "qtd_pago_mes":    len(pagos_mes),
-        "total_filtro":    sum(float(b["valor"]) for b in boletos),
+        "total_vencido": sum(map(_valor, vencidos)), "qtd_vencido": len(vencidos),
+        "total_hoje": sum(map(_valor, vence_hoje)), "qtd_hoje": len(vence_hoje),
+        "total_semana": sum(map(_valor, semana_pend)), "qtd_semana": len(semana_pend),
+        "total_pago_mes": sum(map(_valor, pagos_mes)), "qtd_pago_mes": len(pagos_mes),
+        "total_pendente": sum(map(_valor, pend)), "qtd_pendente": len(pend),
     }
 
-    # resumo por loja (apenas pendentes)
-    from collections import defaultdict
-    resumo_lojas: dict = defaultdict(lambda: {"nome": "", "qtd": 0, "total": 0.0, "id": None})
-    for b in pendentes_geral:
-        k = b["estabelecimento_id"]
-        resumo_lojas[k]["nome"] = b["estabelecimento"]
-        resumo_lojas[k]["id"] = k
-        resumo_lojas[k]["qtd"] += 1
-        resumo_lojas[k]["total"] += float(b["valor"])
-    resumo_lojas_list = sorted(resumo_lojas.values(), key=lambda x: -x["total"])
+    # ── resumo por loja (todas as lojas, mesmo sem boletos) ───────────────
+    estabelecimentos = db.listar_estabelecimentos()
+    resumo = {e["id"]: {"id": e["id"], "nome": e["nome"], "qtd": 0, "total": 0.0,
+                        "qtd_vencido": 0, "total_vencido": 0.0,
+                        "total_semana": 0.0, "total_pago_mes": 0.0}
+              for e in estabelecimentos}
+    for b in todos:
+        r = resumo.get(b["estabelecimento_id"])
+        if r is None:
+            continue
+        v = _valor(b)
+        if a_pagar(b):
+            r["qtd"] += 1
+            r["total"] += v
+            if b["data_vencimento"] < hoje_iso:
+                r["qtd_vencido"] += 1
+                r["total_vencido"] += v
+            if seg_iso <= b["data_vencimento"] <= dom_iso:
+                r["total_semana"] += v
+        elif pago_no_mes(b):
+            r["total_pago_mes"] += v
+    resumo_lojas = sorted(resumo.values(), key=lambda x: (-x["total"], x["nome"]))
 
-    # lote semanal: boletos da semana agrupados por dia
-    DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    semana_boletos = [b for b in todos_sem_filtro if seg.isoformat() <= b["data_vencimento"] <= dom.isoformat()]
+    # ── lote semanal (seg–dom), separando a pagar x pago ──────────────────
+    dias_pt = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     lote_semanal = []
     for i in range(7):
         dia = seg + timedelta(days=i)
-        dia_str = dia.isoformat()
-        dia_boletos = [b for b in semana_boletos if b["data_vencimento"] == dia_str]
+        d_iso = dia.isoformat()
+        do_dia = [b for b in todos if b["data_vencimento"] == d_iso
+                  and (est_id is None or b["estabelecimento_id"] == est_id)]
+        ap = [b for b in do_dia if a_pagar(b)]
+        pg = [b for b in do_dia if not a_pagar(b)]
         lote_semanal.append({
-            "dia_nome": DIAS_PT[i],
-            "dia_iso": dia_str,
-            "is_hoje": dia == hoje,
-            "total": sum(float(b["valor"]) for b in dia_boletos),
-            "qtd": len(dia_boletos),
-            "boletos": dia_boletos,
+            "dia_nome": dias_pt[i], "dia_iso": d_iso, "dia_num": dia.strftime("%d/%m"),
+            "is_hoje": dia == hoje, "passado": dia < hoje,
+            "total": sum(map(_valor, do_dia)), "qtd": len(do_dia),
+            "total_pendente": sum(map(_valor, ap)), "qtd_pendente": len(ap),
+            "total_pago": sum(map(_valor, pg)), "qtd_pago": len(pg),
         })
+    semana_total = {
+        "total": sum(d["total"] for d in lote_semanal),
+        "pendente": sum(d["total_pendente"] for d in lote_semanal),
+        "pago": sum(d["total_pago"] for d in lote_semanal),
+        "qtd": sum(d["qtd"] for d in lote_semanal),
+    }
 
-    estabelecimentos = db.listar_estabelecimentos()
+    # ── listagem filtrada ─────────────────────────────────────────────────
+    boletos = todos
+    if est_id is not None:
+        boletos = [b for b in boletos if b["estabelecimento_id"] == est_id]
+    if di:
+        boletos = [b for b in boletos if b["data_vencimento"] >= di]
+    if df:
+        boletos = [b for b in boletos if b["data_vencimento"] <= df]
+    termo = busca.strip().lower()
+    if termo:
+        boletos = [b for b in boletos if termo in " ".join(
+            str(b.get(k) or "") for k in ("fornecedor", "arquivo_nome", "estabelecimento", "linha_digitavel")
+        ).lower()]
+    filtros_status = {
+        "vencidos": lambda b: a_pagar(b) and b["data_vencimento"] < hoje_iso,
+        "hoje": lambda b: a_pagar(b) and b["data_vencimento"] == hoje_iso,
+        "semana": lambda b: seg_iso <= b["data_vencimento"] <= dom_iso,
+        "pendentes": a_pagar,
+        "pagos": lambda b: b["status"] == "Pago",
+        "pagos_mes": pago_no_mes,
+    }
+    if status in filtros_status:
+        boletos = [b for b in boletos if filtros_status[status](b)]
+    if status in ("pagos", "pagos_mes"):
+        boletos = sorted(boletos, key=lambda b: b.get("pago_em") or "", reverse=True)
+
+    stats["total_filtro"] = sum(map(_valor, boletos))
+    stats["qtd_filtro"] = len(boletos)
+
+    loja_nome = next((e["nome"] for e in estabelecimentos if e["id"] == est_id), "")
+    filtros_ativos = bool(est_id or status or di or df or termo)
+
     return _tpl(
         request, "dono_dashboard.html", user=user,
         boletos=boletos,
         estabelecimentos=estabelecimentos,
-        statuses=db.STATUSES,
+        status_opcoes=_DONO_STATUS,
         stats=stats,
-        resumo_lojas=resumo_lojas_list,
+        resumo_lojas=resumo_lojas,
         lote_semanal=lote_semanal,
-        seg_iso=seg.isoformat(),
-        dom_iso=dom.isoformat(),
-        filtro_loja=loja_id,
+        semana_total=semana_total,
+        seg_iso=seg_iso,
+        dom_iso=dom_iso,
+        filtro_loja=loja_id if est_id else "",
+        filtro_loja_nome=loja_nome,
         filtro_status=status,
-        filtro_inicio=data_inicio,
-        filtro_fim=data_fim,
+        filtro_inicio=di,
+        filtro_fim=df,
         filtro_busca=busca,
-        hoje=hoje.isoformat(),
+        filtros_ativos=filtros_ativos,
+        hoje=hoje_iso,
     )
 
 
