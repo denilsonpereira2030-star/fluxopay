@@ -296,6 +296,40 @@ def _init_db_inner() -> None:
                 conn.execute(f"ALTER TABLE boletos ADD COLUMN {col} {definition}")
         conn.execute("UPDATE boletos SET status='Pendente' WHERE status IS NULL")
 
+    # ── importação automática de e-mails ──────────────────────────────────
+    if _USE_PG:
+        cur.execute("ALTER TABLE estabelecimentos ADD COLUMN IF NOT EXISTS cnpj TEXT")
+    else:
+        est_cols = [r["name"] for r in conn.execute("PRAGMA table_info(estabelecimentos)").fetchall()]
+        if "cnpj" not in est_cols:
+            conn.execute("ALTER TABLE estabelecimentos ADD COLUMN cnpj TEXT")
+
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS importacoes (
+            id {serial} {'PRIMARY KEY' if _USE_PG else ''},
+            chave TEXT NOT NULL UNIQUE,
+            message_id TEXT,
+            remetente TEXT,
+            assunto TEXT,
+            recebido_em TEXT,
+            arquivo_nome TEXT,
+            arquivo_url TEXT,
+            estabelecimento_id INTEGER,
+            fornecedor TEXT,
+            valor REAL,
+            data_vencimento TEXT,
+            linha_digitavel TEXT,
+            codigo_valido INTEGER DEFAULT 0,
+            usou_ia INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'revisao',
+            motivo TEXT,
+            boleto_id INTEGER,
+            criado_em TEXT NOT NULL,
+            resolvido_por TEXT,
+            resolvido_em TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -371,7 +405,7 @@ def get_estabelecimento_nome(estabelecimento_id: int | None) -> str:
 def listar_estabelecimentos() -> list[dict]:
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, nome FROM estabelecimentos ORDER BY id")
+    cur.execute("SELECT id, nome, cnpj FROM estabelecimentos ORDER BY id")
     rows = _fetchall(cur)
     _release(conn)
     return rows
@@ -800,3 +834,114 @@ def get_dashboard_stats() -> dict:
         "lote_inicio": lote_inicio,
         "lote_fim": lote_fim,
     }
+
+
+# ── CNPJ das lojas ───────────────────────────────────────────────────────────
+
+def atualizar_cnpj_loja(estabelecimento_id: int, cnpj: str | None) -> None:
+    import re as _re
+    digitos = _re.sub(r"\D", "", cnpj or "") or None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE estabelecimentos SET cnpj={_ph()} WHERE id={_ph()}", (digitos, estabelecimento_id))
+    _commit_close(conn)
+
+
+# ── importações (e-mail → boleto) ────────────────────────────────────────────
+
+IMPORTACAO_STATUS = ("importado", "revisao", "duplicado", "descartado", "ignorado")
+
+
+def importacao_existe(chave: str) -> bool:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT 1 FROM importacoes WHERE chave={_ph()}", (chave,))
+    achou = cur.fetchone() is not None
+    _release(conn)
+    return achou
+
+
+def registrar_importacao(**campos) -> int:
+    campos.setdefault("criado_em", datetime.now().isoformat(timespec="seconds"))
+    cols = list(campos)
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO importacoes ({', '.join(cols)}) VALUES ({_ph(len(cols))})",
+            [campos[c] for c in cols],
+        )
+        if _USE_PG:
+            cur.execute("SELECT lastval()")
+            novo_id = cur.fetchone()[0]
+        else:
+            novo_id = cur.lastrowid
+        _commit_close(conn)
+        return novo_id
+    except Exception:
+        _release(conn, error=True)
+        raise
+
+
+def atualizar_importacao(importacao_id: int, **campos) -> None:
+    if not campos:
+        return
+    sets = ", ".join(f"{k}={_ph()}" for k in campos)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE importacoes SET {sets} WHERE id={_ph()}", [*campos.values(), importacao_id])
+    _commit_close(conn)
+
+
+def listar_importacoes(status: str | None = None, limite: int = 200) -> list[dict]:
+    q = """SELECT i.*, e.nome AS estabelecimento
+           FROM importacoes i LEFT JOIN estabelecimentos e ON e.id = i.estabelecimento_id"""
+    params: list = []
+    if status:
+        q += f" WHERE i.status={_ph()}"
+        params.append(status)
+    q += f" ORDER BY i.id DESC LIMIT {int(limite)}"
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(q, params)
+    rows = _fetchall(cur)
+    _release(conn)
+    return rows
+
+
+def get_importacao(importacao_id: int) -> dict | None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT * FROM importacoes WHERE id={_ph()}", (importacao_id,))
+    row = _fetchone(cur)
+    _release(conn)
+    return row
+
+
+def contar_importacoes_revisao() -> int:
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM importacoes WHERE status='revisao'")
+        n = cur.fetchone()[0]
+        _release(conn)
+        return int(n or 0)
+    except Exception:
+        return 0
+
+
+def boleto_por_linha(linha_digitavel: str) -> dict | None:
+    """Procura boleto já cadastrado com o mesmo código (comparando só dígitos)."""
+    import re as _re
+    alvo = _re.sub(r"\D", "", linha_digitavel or "")
+    if len(alvo) < 44:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, linha_digitavel, status FROM boletos WHERE linha_digitavel IS NOT NULL")
+    rows = _fetchall(cur)
+    _release(conn)
+    for r in rows:
+        if _re.sub(r"\D", "", r["linha_digitavel"] or "") == alvo:
+            return r
+    return None

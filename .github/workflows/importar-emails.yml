@@ -1,0 +1,27 @@
+name: Importar boletos do Gmail
+
+# Chama o FluxoPay a cada 30 min (horário comercial, seg–sáb) para ler os
+# e-mails novos. Também "acorda" o Render free se ele estiver dormindo.
+# Configure o segredo do repositório CRON_URL com:
+#   https://fluxopay.onrender.com/tarefas/importar-emails?token=SEU_CRON_TOKEN
+on:
+  schedule:
+    - cron: "*/30 10-23 * * 1-6"   # UTC → 07h–20h no horário de Brasília
+  workflow_dispatch: {}
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Disparar importação
+        env:
+          CRON_URL: ${{ secrets.CRON_URL }}
+        run: |
+          if [ -z "$CRON_URL" ]; then echo "Segredo CRON_URL não configurado"; exit 0; fi
+          # 1ª chamada pode demorar (Render acordando); tenta até 3 vezes
+          for i in 1 2 3; do
+            if curl -fsS --max-time 90 "$CRON_URL"; then exit 0; fi
+            sleep 20
+          done
+          exit 1

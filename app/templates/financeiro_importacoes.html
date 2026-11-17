@@ -1,0 +1,190 @@
+{% extends "fin_layout.html" %}
+{% set active = 'importacoes' %}
+{% block title %}Caixa de Entrada{% endblock %}
+
+{% block fin_content %}
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+  <div>
+    <div class="page-eyebrow">Financeiro · Importação automática</div>
+    <div class="page-title">Caixa de Entrada</div>
+    <div class="page-subtitle">Boletos lidos do Gmail{% if gmail_user %} ({{ gmail_user }}){% endif %} e de arquivos enviados aqui</div>
+  </div>
+  <form method="post" action="/financeiro/importacoes/buscar">
+    <button class="btn btn-primary" type="submit" {% if not gmail_ok or em_andamento %}disabled{% endif %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      {{ 'Buscando…' if em_andamento else 'Buscar e-mails agora' }}
+    </button>
+  </form>
+</div>
+
+<!-- STATUS DA CONFIGURAÇÃO -->
+<div class="imp-status">
+  <span class="imp-pill {{ 'ok' if gmail_ok else 'off' }}">Gmail {{ 'conectado' if gmail_ok else 'não configurado' }}</span>
+  <span class="imp-pill {{ 'ok' if gemini_ok else 'off' }}">Leitura de fotos (Gemini) {{ 'ativa' if gemini_ok else 'desligada' }}</span>
+  {% set sem_cnpj = estabelecimentos | rejectattr('cnpj') | list %}
+  {% if sem_cnpj %}
+  <a class="imp-pill warn" href="/financeiro/admin#cnpjs">{{ sem_cnpj | length }} loja{{ 's' if sem_cnpj|length != 1 }} sem CNPJ cadastrado</a>
+  {% endif %}
+  {% if ultima %}
+  <span class="imp-last">
+    Última busca {{ (ultima.fim or '')[11:16] }} ·
+    {{ ultima.emails or 0 }} e-mail(s) ·
+    <b style="color:var(--emerald);">{{ ultima.importado or 0 }} salvo(s)</b> ·
+    <b style="color:var(--amber);">{{ ultima.revisao or 0 }} p/ revisar</b>
+    {% if ultima.duplicado %}· {{ ultima.duplicado }} duplicado(s){% endif %}
+    {% if ultima.restantes %}· {{ ultima.restantes }} na fila{% endif %}
+    {% if ultima.erro %}<span style="color:var(--red);"> · {{ ultima.erro }}</span>{% endif %}
+  </span>
+  {% endif %}
+</div>
+
+<!-- ENVIO MANUAL -->
+<form method="post" action="/financeiro/importacoes/enviar" enctype="multipart/form-data" class="card imp-drop" id="drop">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+  <div>
+    <div style="font-weight:700;color:var(--txt-1);">Arraste vários boletos aqui (PDF ou foto)</div>
+    <div class="text-sm text-faint">O sistema lê o código, valor, vencimento e a loja sozinho — mesmo processo dos e-mails.</div>
+  </div>
+  <label class="btn btn-ghost" style="cursor:pointer;">
+    Escolher arquivos
+    <input type="file" name="arquivos" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" hidden onchange="this.form.submit()">
+  </label>
+</form>
+
+<!-- ABAS -->
+<div class="imp-tabs">
+  <a href="/financeiro/importacoes?aba=revisao" class="{{ 'on' if aba == 'revisao' }}">Para revisar{% set n = contar_revisao() %}{% if n %} <span class="imp-count">{{ n }}</span>{% endif %}</a>
+  <a href="/financeiro/importacoes?aba=todos" class="{{ 'on' if aba == 'todos' }}">Histórico de importação</a>
+</div>
+
+{% if not itens %}
+<div class="card empty-state" style="text-align:center;padding:40px 20px;">
+  <div style="font-size:28px;margin-bottom:6px;">✓</div>
+  <div class="empty-state-text">{{ 'Nada para revisar. Tudo que chegou foi salvo automaticamente.' if aba == 'revisao' else 'Nenhuma importação ainda.' }}</div>
+</div>
+{% endif %}
+
+{% if aba == 'revisao' %}
+<div style="display:flex;flex-direction:column;gap:14px;">
+  {% for i in itens %}
+  <div class="card imp-card" id="imp-{{ i.id }}">
+    <div class="imp-head">
+      <div style="min-width:0;">
+        <div class="imp-assunto" title="{{ i.assunto }}">{{ i.assunto or '(sem assunto)' }}</div>
+        <div class="text-sm text-faint">{{ i.remetente }} · {{ (i.recebido_em or '')[:16] | replace('T', ' ') }} · {{ i.arquivo_nome }}</div>
+      </div>
+      {% if i.arquivo_url %}
+      <a href="{{ i.arquivo_url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver arquivo</a>
+      {% endif %}
+    </div>
+    {% if i.motivo %}<div class="imp-motivo">⚠ {{ i.motivo }}</div>{% endif %}
+
+    <form method="post" action="/financeiro/importacoes/{{ i.id }}/aprovar" class="imp-form">
+      <div class="form-group">
+        <label class="form-label">Loja</label>
+        <select class="form-control" name="estabelecimento_id" required>
+          <option value="">Selecione…</option>
+          {% for e in estabelecimentos %}
+          <option value="{{ e.id }}" {% if i.estabelecimento_id == e.id %}selected{% endif %}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fornecedor</label>
+        <input class="form-control" name="fornecedor" value="{{ i.fornecedor or '' }}" maxlength="120">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valor (R$)</label>
+        <input class="form-control" name="valor" type="number" step="0.01" min="0.01" inputmode="decimal" value="{{ '%.2f' % i.valor if i.valor else '' }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vencimento</label>
+        <input class="form-control" name="data_vencimento" type="date" value="{{ i.data_vencimento or '' }}" required>
+      </div>
+      <div class="form-group imp-full">
+        <label class="form-label">Linha digitável {% if i.codigo_valido %}<span style="color:var(--emerald);">✓ conferida</span>{% elif i.linha_digitavel %}<span style="color:var(--red);">✗ não confere</span>{% endif %}</label>
+        <input class="form-control" name="linha_digitavel" value="{{ i.linha_digitavel or '' }}" style="font-family:monospace;font-size:12px;">
+      </div>
+      <div class="imp-acoes imp-full">
+        <button class="btn btn-success" type="submit">Aprovar e salvar</button>
+        <button class="btn btn-ghost" type="submit" formaction="/financeiro/importacoes/{{ i.id }}/descartar" formnovalidate>Descartar</button>
+        {% if i.usou_ia %}<span class="text-sm text-faint">lido com IA</span>{% endif %}
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+{% if itens %}
+<div class="card">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Recebido</th><th>Origem</th><th>Loja</th><th>Fornecedor</th><th>Valor</th><th>Venc.</th><th>Resultado</th></tr></thead>
+      <tbody>
+        {% set rot = {'importado': ('Salvo', 'pago'), 'revisao': ('Revisar', 'pendente'), 'duplicado': ('Duplicado', 'em-lote'), 'descartado': ('Descartado', 'urgente'), 'ignorado': ('Não é boleto', 'em-lote')} %}
+        {% for i in itens %}
+        {% set r = rot.get(i.status, (i.status, 'em-lote')) %}
+        <tr>
+          <td class="td-date">{{ (i.criado_em or '')[:16] | replace('T', ' ') }}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ i.assunto }} — {{ i.arquivo_nome }}">
+            {{ i.remetente }}<div class="text-sm text-faint">{{ i.arquivo_nome }}</div>
+          </td>
+          <td>{{ i.estabelecimento or '—' }}</td>
+          <td>{{ i.fornecedor or '—' }}</td>
+          <td class="td-value">{{ i.valor | currency if i.valor else '—' }}</td>
+          <td class="td-date">{{ i.data_vencimento | date_br if i.data_vencimento else '—' }}</td>
+          <td>
+            <span class="badge badge-{{ r[1] }}">{{ r[0] }}</span>
+            {% if i.boleto_id %}<div class="text-sm text-faint">boleto #{{ i.boleto_id }}</div>{% endif %}
+            {% if i.status == 'revisao' %}<a class="text-sm" href="/financeiro/importacoes#imp-{{ i.id }}">revisar →</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+<style>
+.imp-status{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.imp-pill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--border-hi);color:var(--txt-2);}
+.imp-pill.ok{color:var(--emerald);border-color:var(--emerald-bdr);background:var(--emerald-dim);}
+.imp-pill.off{color:var(--txt-3);}
+.imp-pill.warn{color:var(--amber);border-color:var(--amber-bdr);background:var(--amber-dim);text-decoration:none;}
+.imp-last{font-size:12px;color:var(--txt-3);}
+.imp-drop{display:flex;align-items:center;gap:14px;border-style:dashed;margin-bottom:16px;transition:border-color .15s,background .15s;}
+.imp-drop.over{border-color:var(--blue);background:var(--blue-dim);}
+.imp-drop > svg{width:28px;height:28px;color:var(--txt-3);flex-shrink:0;}
+.imp-drop > div{flex:1;}
+.imp-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);}
+.imp-tabs a{padding:8px 14px;font-size:13px;font-weight:600;color:var(--txt-3);border-bottom:2px solid transparent;text-decoration:none;}
+.imp-tabs a.on{color:var(--txt-1);border-color:var(--blue);}
+.imp-count{background:var(--amber);color:#111;border-radius:99px;padding:0 7px;font-size:11px;margin-left:4px;}
+.imp-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;}
+.imp-assunto{font-weight:700;color:var(--txt-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.imp-motivo{font-size:12px;color:var(--amber);background:var(--amber-dim);border:1px solid var(--amber-bdr);border-radius:var(--r-md);padding:7px 10px;margin-bottom:12px;}
+.imp-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.imp-full{grid-column:1/-1;}
+.imp-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+@media(max-width:900px){.imp-form{grid-template-columns:1fr 1fr;}}
+@media(max-width:560px){.imp-form{grid-template-columns:1fr;}.imp-drop{flex-direction:column;text-align:center;}}
+</style>
+
+<script>
+(function(){
+  var drop = document.getElementById('drop');
+  var input = drop.querySelector('input[type=file]');
+  ['dragenter','dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function(e){
+    if (!e.dataTransfer.files.length) return;
+    input.files = e.dataTransfer.files;
+    drop.submit();
+  });
+  {% if em_andamento %}setTimeout(function(){ location.reload(); }, 6000);{% endif %}
+})();
+</script>
+{% endblock %}

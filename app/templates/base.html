@@ -728,6 +728,8 @@ table.data-table {
 }
 
 @media (max-width: 768px) {
+  /* topo em cima do conteúdo, não ao lado */
+  .shell { flex-direction: column; }
   /* Header compacto — single row, max 55px */
   .mobile-topbar {
     padding: 8px 12px;

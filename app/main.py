@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, pdf_service
+from . import db, importador_email, leitor_boleto, pdf_service, storage
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -93,6 +93,7 @@ def _format_date_br(d: str | date) -> str:
 
 templates.env.filters["currency"] = _format_currency
 templates.env.filters["date_br"] = _format_date_br
+templates.env.globals["contar_revisao"] = db.contar_importacoes_revisao
 
 
 # ── AUTH ─────────────────────────────────────────────────────────────────────
@@ -211,42 +212,15 @@ def gerente_salvar_boleto(
     print(f"[upload] arquivo={arquivo.filename!r} tamanho={len(conteudo)} bytes tipo={arquivo.content_type!r}", flush=True)
 
     try:
-        nome, tipo, dados = pdf_service.processar_upload(conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream")
+        nome, arquivo_url, dados = storage.armazenar_boleto(
+            conteudo, arquivo.filename, arquivo.content_type or "application/octet-stream",
+            user["estabelecimento_id"],
+        )
         del conteudo
 
-        # Tenta extrair linha digitável antes de liberar os dados do PDF
-        linha_digitavel = pdf_service.extrair_linha_digitavel(dados)
-
-        # Chave única e só-ASCII: <loja>/<AAAA-MM>/<uuid>_<nome>.pdf
-        # (evita colisão de "boleto.pdf" e o "Invalid key" com acentos).
-        caminho = pdf_service.chave_storage(user["estabelecimento_id"], nome)
-        if db.supabase:
-            bucket = db.supabase.storage.from_(db.SUPABASE_BUCKET)
-            ultimo_erro = None
-            for _tentativa in range(2):
-                try:
-                    bucket.upload(
-                        path=caminho,
-                        file=dados,
-                        file_options={"content-type": tipo, "upsert": "false"},
-                    )
-                    ultimo_erro = None
-                    break
-                except Exception as storage_exc:
-                    ultimo_erro = storage_exc
-                    print(f"[upload] StorageApiError ({caminho}): {storage_exc!r}", flush=True)
-                    # gera nova chave e tenta mais uma vez (colisão/erro transitório)
-                    caminho = pdf_service.chave_storage(user["estabelecimento_id"], nome)
-            if ultimo_erro is not None:
-                raise ultimo_erro
-            arquivo_url = bucket.get_public_url(caminho)
-        else:
-            # fallback local: salva em disco para dev
-            dest = Path(db.BASE_DIR) / "uploads" / caminho
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(dados)
-            arquivo_url = f"/uploads/{caminho}"
-
+        # Linha digitável validada (dígitos verificadores); cai no extrator antigo se não achar
+        cod = leitor_boleto.procurar_codigo(leitor_boleto.texto_do_pdf(dados))
+        linha_digitavel = cod.linha_digitavel if cod else pdf_service.extrair_linha_digitavel(dados)
         del dados
         gc.collect()
 
@@ -829,3 +803,143 @@ async def gerente_boletos(
         mes_sel=mes_sel, ano_sel=ano_sel,
         hoje=date.today().isoformat(),
     )
+
+
+# ── IMPORTAÇÃO AUTOMÁTICA (Gmail → boletos) ─────────────────────────────────
+
+@app.get("/financeiro/importacoes", response_class=HTMLResponse)
+async def financeiro_importacoes(request: Request, aba: str = "revisao"):
+    user = _require_financeiro(request)
+    aba = aba if aba in ("revisao", "todos") else "revisao"
+    itens = db.listar_importacoes(status="revisao" if aba == "revisao" else None)
+    return _tpl(
+        request, "financeiro_importacoes.html", user=user,
+        itens=itens, aba=aba,
+        estabelecimentos=db.listar_estabelecimentos(),
+        gmail_ok=importador_email.configurado(),
+        gmail_user=importador_email.GMAIL_USER,
+        gemini_ok=leitor_boleto.gemini_disponivel(),
+        em_andamento=importador_email.em_andamento(),
+        ultima=importador_email.ultima_execucao,
+        hoje=date.today().isoformat(),
+    )
+
+
+@app.post("/financeiro/importacoes/buscar")
+async def financeiro_importacoes_buscar(request: Request):
+    _require_financeiro(request)
+    if not importador_email.configurado():
+        return RedirectResponse("/financeiro/importacoes?msg=Gmail+ainda+n%C3%A3o+configurado+no+Render", status_code=303)
+    iniciou = importador_email.importar_em_segundo_plano()
+    msg = "Buscando+e-mails…+atualize+em+alguns+segundos" if iniciou else "J%C3%A1+existe+uma+busca+em+andamento"
+    return RedirectResponse(f"/financeiro/importacoes?msg={msg}", status_code=303)
+
+
+@app.post("/financeiro/importacoes/enviar")
+def financeiro_importacoes_enviar(request: Request, arquivos: list[UploadFile] = File(...)):
+    """Envio manual de vários arquivos de uma vez — passa pela mesma leitura automática."""
+    user = _require_financeiro(request)
+    lojas = db.listar_estabelecimentos()
+    cont: dict[str, int] = {}
+    for arq in arquivos[:20]:
+        dados = arq.file.read(9 * 1024 * 1024)
+        if not dados:
+            continue
+        mime = arq.content_type or "application/octet-stream"
+        if dados[:4] == b"%PDF":
+            mime = "application/pdf"
+        try:
+            r = importador_email.processar_anexo(
+                dados, mime, arq.filename or "arquivo.pdf",
+                message_id=f"manual-{uuid.uuid4().hex}", remetente=user["login"],
+                remetente_nome="", assunto="Envio manual", recebido_em=datetime.now().isoformat(timespec="seconds"),
+                corpo="", lojas=lojas,
+            )
+            cont[r["status"]] = cont.get(r["status"], 0) + 1
+        except Exception as exc:
+            print(f"[envio manual] {arq.filename!r}: {exc!r}", flush=True)
+            cont["erro"] = cont.get("erro", 0) + 1
+        finally:
+            del dados
+            gc.collect()
+    rotulos = {"importado": "salvo(s)", "revisao": "para revisar", "duplicado": "duplicado(s)",
+               "ignorado": "ignorado(s)", "erro": "com erro"}
+    resumo = ", ".join(f"{n} {rotulos.get(k, k)}" for k, n in cont.items()) or "nenhum arquivo"
+    return RedirectResponse(f"/financeiro/importacoes?aba=todos&msg={quote(resumo)}", status_code=303)
+
+
+@app.post("/financeiro/importacoes/{imp_id}/aprovar")
+async def financeiro_importacao_aprovar(
+    imp_id: int,
+    request: Request,
+    estabelecimento_id: str = Form(""),
+    fornecedor: str = Form(""),
+    valor: str = Form(""),
+    data_vencimento: str = Form(""),
+    linha_digitavel: str = Form(""),
+):
+    user = _require_financeiro(request)
+    imp = db.get_importacao(imp_id)
+    if not imp or imp["status"] != "revisao":
+        return RedirectResponse("/financeiro/importacoes?msg=Item+j%C3%A1+resolvido", status_code=303)
+    try:
+        est_id = int(estabelecimento_id)
+        v = float(valor.replace(".", "").replace(",", ".") if "," in valor else valor)
+        venc = date.fromisoformat(data_vencimento)
+        if v <= 0:
+            raise ValueError
+    except ValueError:
+        return RedirectResponse(f"/financeiro/importacoes?msg={quote('Preencha loja, valor e vencimento')}#imp-{imp_id}", status_code=303)
+    linha = linha_digitavel.strip() or None
+    if linha:
+        cod = leitor_boleto.decodificar(linha)
+        if cod:
+            linha = cod.linha_digitavel
+        dup = db.boleto_por_linha(linha)
+        if dup:
+            db.atualizar_importacao(imp_id, status="duplicado", boleto_id=dup["id"],
+                                    resolvido_por=user["login"], resolvido_em=datetime.now().isoformat(timespec="seconds"))
+            aviso = quote(f"Já existia como boleto #{dup['id']}")
+            return RedirectResponse(f"/financeiro/importacoes?msg={aviso}", status_code=303)
+    boleto_id = db.salvar_boleto(
+        est_id, imp.get("arquivo_nome") or "boleto.pdf", imp.get("arquivo_url") or "", v, venc, linha,
+        fornecedor=fornecedor[:120], criado_por=f"e-mail · {imp.get('remetente') or ''} (aprovado por {user['login']})"[:120],
+    )
+    db.atualizar_importacao(
+        imp_id, status="importado", boleto_id=boleto_id, estabelecimento_id=est_id,
+        fornecedor=fornecedor[:120] or None, valor=v, data_vencimento=venc.isoformat(), linha_digitavel=linha,
+        resolvido_por=user["login"], resolvido_em=datetime.now().isoformat(timespec="seconds"),
+    )
+    return RedirectResponse(f"/financeiro/importacoes?msg={quote(f'Boleto #{boleto_id} salvo')}", status_code=303)
+
+
+@app.post("/financeiro/importacoes/{imp_id}/descartar")
+async def financeiro_importacao_descartar(imp_id: int, request: Request):
+    user = _require_financeiro(request)
+    db.atualizar_importacao(imp_id, status="descartado", resolvido_por=user["login"],
+                            resolvido_em=datetime.now().isoformat(timespec="seconds"))
+    return RedirectResponse("/financeiro/importacoes?msg=Item+descartado", status_code=303)
+
+
+@app.post("/financeiro/admin/loja/{est_id}/cnpj")
+async def financeiro_admin_cnpj(est_id: int, request: Request, cnpj: str = Form("")):
+    _require_financeiro(request)
+    digitos = "".join(c for c in cnpj if c.isdigit())
+    if digitos and not leitor_boleto.cnpj_valido(digitos):
+        return RedirectResponse(f"/financeiro/admin?error={quote('CNPJ inválido: ' + cnpj)}", status_code=303)
+    db.atualizar_cnpj_loja(est_id, digitos or None)
+    return RedirectResponse("/financeiro/admin?msg=CNPJ+da+loja+salvo", status_code=303)
+
+
+@app.api_route("/tarefas/importar-emails", methods=["GET", "POST"])
+async def tarefa_importar_emails(token: str = ""):
+    """Chamado por um agendador externo (cron-job.org / GitHub Actions) a cada X min.
+    Também 'acorda' o Render free. Protegido por CRON_TOKEN."""
+    esperado = os.getenv("CRON_TOKEN", "")
+    import hmac
+    if not esperado or not hmac.compare_digest(token, esperado):
+        raise HTTPException(403)
+    if not importador_email.configurado():
+        return {"ok": False, "erro": "Gmail não configurado"}
+    iniciou = importador_email.importar_em_segundo_plano()
+    return {"ok": True, "iniciou": iniciou, "ultima": importador_email.ultima_execucao}

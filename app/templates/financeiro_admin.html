@@ -81,6 +81,14 @@
         <div class="section-title">{{ est.nome }}</div>
         <span class="badge badge-em-lote" style="font-size:9px;">{{ gerentes_est | length }} gerente{{ 's' if gerentes_est | length != 1 }}</span>
       </div>
+      <form method="post" action="/financeiro/admin/loja/{{ est.id }}/cnpj" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;" {% if loop.first %}id="cnpjs"{% endif %}>
+        <div class="form-group" style="flex:1;margin:0;">
+          <label class="form-label">CNPJ da loja (para identificar boletos do e-mail)</label>
+          <input class="form-control" name="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00"
+                 value="{% if est.cnpj and est.cnpj|length == 14 %}{{ est.cnpj[:2] }}.{{ est.cnpj[2:5] }}.{{ est.cnpj[5:8] }}/{{ est.cnpj[8:12] }}-{{ est.cnpj[12:] }}{% else %}{{ est.cnpj or '' }}{% endif %}">
+        </div>
+        <button class="btn btn-ghost btn-sm" type="submit" style="height:36px;">Salvar</button>
+      </form>
       {% if gerentes_est %}
       <div style="display:flex;flex-direction:column;gap:8px;">
         {% for g in gerentes_est %}
